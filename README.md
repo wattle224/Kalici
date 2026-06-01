@@ -7,7 +7,7 @@ ATLAS is a SwiftUI iOS app for private markets investment operations. It provide
 - **Dashboard** — portfolio NAV, unfunded commitments, and items requiring attention
 - **Portfolio** — investment positions with commitment, call, and distribution metrics
 - **Capital** — capital calls and distributions with workflow status
-- **Trades** — automated execution history with per-fill execution prices (not live quotes)
+- **Trading** — execution pause state, open-position unrealized P&L, and trade history (confirmed fills only; skipped intents excluded)
 - **Valuations** — NAV records and approval status by investment
 - **Reports** — operational report queue with period and generation metadata
 

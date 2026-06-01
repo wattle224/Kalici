@@ -28,6 +28,29 @@ enum MoneyFormat {
     }
 }
 
+enum SterlingFormat {
+    static let currency: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "GBP"
+        formatter.locale = Locale(identifier: "en_GB")
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return formatter
+    }()
+
+    static func string(from value: Decimal) -> String {
+        currency.string(from: value as NSDecimalNumber) ?? "£0.00"
+    }
+
+    static func signedPnL(from value: Decimal) -> String {
+        let formatted = string(from: abs(value))
+        if value > 0 { return "+\(formatted)" }
+        if value < 0 { return "−\(formatted)" }
+        return formatted
+    }
+}
+
 enum PriceFormat {
     /// Per-unit execution prices need fractional digits; whole-dollar formatting makes distinct fills look identical.
     static let perUnit: NumberFormatter = {

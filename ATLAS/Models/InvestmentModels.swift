@@ -101,9 +101,22 @@ struct PortfolioSummary {
     var activeInvestments: Int
 }
 
+enum AutomationExecutionState: String, Codable {
+    case running
+    case paused
+}
+
 enum TradeSide: String, Codable {
     case buy
     case sell
+}
+
+enum TradeRecordStatus: String, Codable {
+    /// Exchange/broker confirmed fill with a price.
+    case filled
+    /// Automation logged intent but did not execute (e.g. execution paused).
+    case skipped
+    case pending
 }
 
 /// A completed execution. `executionPrice` is frozen at fill time and must not be derived from live quotes.
@@ -112,13 +125,31 @@ struct Trade: Identifiable, Codable, Hashable {
     var symbol: String
     var side: TradeSide
     var quantity: Decimal
-    /// Per-unit fill price captured when the trade was recorded.
+    /// Per-unit fill price captured when the trade was recorded. Zero means no fill occurred.
     var executionPrice: Decimal
     var executedAt: Date
     var orderReference: String
     var source: String
+    var status: TradeRecordStatus
+    /// Realized P&L for this fill only (e.g. on a sell). Nil for buys and non-fills.
+    var realizedPnL: Decimal?
 
     var notional: Decimal {
         quantity * executionPrice
     }
+
+    /// Only confirmed fills belong in trade history — not skipped intents or zero-price rows.
+    var isSettledFill: Bool {
+        status == .filled && executionPrice > 0 && quantity > 0
+    }
+}
+
+struct OpenPosition: Identifiable, Codable, Hashable {
+    let id: UUID
+    var symbol: String
+    var quantity: Decimal
+    var averageEntryPrice: Decimal
+    /// Mark-to-market P&L for the open position (not duplicated on each trade row).
+    var unrealizedPnL: Decimal
+    var quoteCurrency: String
 }

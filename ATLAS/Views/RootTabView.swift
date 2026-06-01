@@ -18,14 +18,14 @@ struct RootTabView: View {
                     Label("Capital", systemImage: "arrow.left.arrow.right")
                 }
 
-            TradeHistoryView()
+            TradingTabView()
                 .tabItem {
-                    Label("Trades", systemImage: "clock.arrow.circlepath")
+                    Label("Trading", systemImage: "chart.line.uptrend.xyaxis")
                 }
 
             ValuationsView()
                 .tabItem {
-                    Label("Valuations", systemImage: "chart.line.uptrend.xyaxis")
+                    Label("Valuations", systemImage: "dollarsign.circle")
                 }
 
             ReportsView()

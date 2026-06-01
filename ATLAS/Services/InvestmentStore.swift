@@ -6,14 +6,27 @@ final class InvestmentStore: ObservableObject {
     @Published private(set) var capitalEvents: [CapitalEvent] = []
     @Published private(set) var valuations: [ValuationRecord] = []
     @Published private(set) var reports: [OpsReport] = []
-    @Published private(set) var trades: [Trade] = []
-
     private let tradeAutomation = TradeAutomationService()
 
     init() {
         loadSampleData()
         tradeAutomation.loadSampleExecutions()
-        trades = tradeAutomation.trades
+    }
+
+    var isExecutionPaused: Bool {
+        tradeAutomation.isExecutionPaused
+    }
+
+    var settledTrades: [Trade] {
+        tradeAutomation.settledFills
+    }
+
+    var skippedTradesWhilePaused: [Trade] {
+        tradeAutomation.skippedWhilePaused
+    }
+
+    var ethPosition: OpenPosition? {
+        tradeAutomation.openPositions.first { $0.symbol == "ETH-USD" }
     }
 
     var summary: PortfolioSummary {
