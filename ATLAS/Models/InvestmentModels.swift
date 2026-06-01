@@ -100,3 +100,25 @@ struct PortfolioSummary {
     var pendingCapitalCalls: Decimal
     var activeInvestments: Int
 }
+
+enum TradeSide: String, Codable {
+    case buy
+    case sell
+}
+
+/// A completed execution. `executionPrice` is frozen at fill time and must not be derived from live quotes.
+struct Trade: Identifiable, Codable, Hashable {
+    let id: UUID
+    var symbol: String
+    var side: TradeSide
+    var quantity: Decimal
+    /// Per-unit fill price captured when the trade was recorded.
+    var executionPrice: Decimal
+    var executedAt: Date
+    var orderReference: String
+    var source: String
+
+    var notional: Decimal {
+        quantity * executionPrice
+    }
+}

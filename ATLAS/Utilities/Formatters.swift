@@ -28,11 +28,34 @@ enum MoneyFormat {
     }
 }
 
+enum PriceFormat {
+    /// Per-unit execution prices need fractional digits; whole-dollar formatting makes distinct fills look identical.
+    static let perUnit: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 4
+        return formatter
+    }()
+
+    static func string(from value: Decimal) -> String {
+        perUnit.string(from: value as NSDecimalNumber) ?? "$0.00"
+    }
+}
+
 enum DateFormat {
     static let medium: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
+        return formatter
+    }()
+
+    static let dateTime: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
         return formatter
     }()
 }

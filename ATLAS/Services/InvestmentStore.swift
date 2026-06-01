@@ -6,9 +6,14 @@ final class InvestmentStore: ObservableObject {
     @Published private(set) var capitalEvents: [CapitalEvent] = []
     @Published private(set) var valuations: [ValuationRecord] = []
     @Published private(set) var reports: [OpsReport] = []
+    @Published private(set) var trades: [Trade] = []
+
+    private let tradeAutomation = TradeAutomationService()
 
     init() {
         loadSampleData()
+        tradeAutomation.loadSampleExecutions()
+        trades = tradeAutomation.trades
     }
 
     var summary: PortfolioSummary {

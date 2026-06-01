@@ -20,6 +20,8 @@
 		A1000000000000000000000B /* ValuationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000B /* ValuationsView.swift */; };
 		A1000000000000000000000C /* ReportsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000C /* ReportsView.swift */; };
 		A1000000000000000000000D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* Assets.xcassets */; };
+		A1000000000000000000000E /* TradeAutomationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000E /* TradeAutomationService.swift */; };
+		A1000000000000000000000F /* TradeHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000F /* TradeHistoryView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +38,8 @@
 		B1000000000000000000000B /* ValuationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ValuationsView.swift; sourceTree = "<group>"; };
 		B1000000000000000000000C /* ReportsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportsView.swift; sourceTree = "<group>"; };
 		B1000000000000000000000D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B1000000000000000000000E /* TradeAutomationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradeAutomationService.swift; sourceTree = "<group>"; };
+		B1000000000000000000000F /* TradeHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradeHistoryView.swift; sourceTree = "<group>"; };
 		C10000000000000000000001 /* ATLAS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ATLAS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -91,6 +95,7 @@
 			isa = PBXGroup;
 			children = (
 				B10000000000000000000003 /* InvestmentStore.swift */,
+				B1000000000000000000000E /* TradeAutomationService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -110,6 +115,7 @@
 				B10000000000000000000008 /* DashboardView.swift */,
 				B10000000000000000000009 /* PortfolioView.swift */,
 				B1000000000000000000000A /* CapitalActivityView.swift */,
+				B1000000000000000000000F /* TradeHistoryView.swift */,
 				B1000000000000000000000B /* ValuationsView.swift */,
 				B1000000000000000000000C /* ReportsView.swift */,
 				E10000000000000000000008 /* Components */,
@@ -207,6 +213,8 @@
 				A1000000000000000000000A /* CapitalActivityView.swift in Sources */,
 				A1000000000000000000000B /* ValuationsView.swift in Sources */,
 				A1000000000000000000000C /* ReportsView.swift in Sources */,
+				A1000000000000000000000E /* TradeAutomationService.swift in Sources */,
+				A1000000000000000000000F /* TradeHistoryView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
