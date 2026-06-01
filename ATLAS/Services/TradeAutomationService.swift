@@ -18,12 +18,43 @@ final class TradeAutomationService {
 
   /// Rows logged while paused (should not appear as "filled" in history).
   var skippedWhilePaused: [Trade] {
-    trades.filter { $0.status == .skipped || ($0.executionPrice == 0 && $0.status != .filled) }
+    trades
+      .filter { $0.status == .skipped || ($0.executionPrice == 0 && $0.status != .filled) }
       .sorted { $0.executedAt > $1.executedAt }
+  }
+
+  func bootstrap() {
+    if TradingPersistence.consumeCleanRestartFlag() {
+      performCleanRestart(persist: true)
+      return
+    }
+
+    if let snapshot = TradingPersistence.load() {
+      if snapshot.schemaVersion < TradingPersistence.currentSchemaVersion
+        || TradingPersistence.containsCorruptHistory(snapshot)
+      {
+        performCleanRestart(persist: true)
+        return
+      }
+      apply(TradingPersistence.sanitize(snapshot))
+      persist()
+      return
+    }
+
+    performCleanRestart(persist: true)
+  }
+
+  func performCleanRestart(persist: Bool = true) {
+    TradingPersistence.clear()
+    loadCleanBootstrap()
+    if persist {
+      self.persist()
+    }
   }
 
   func setExecutionPaused(_ paused: Bool) {
     executionState = paused ? .paused : .running
+    persist()
   }
 
   func recordFill(
@@ -63,6 +94,7 @@ final class TradeAutomationService {
         realizedPnL: realizedPnL
       )
     )
+    persist()
   }
 
   /// Logs sizing intent when automation is paused — must not be shown as a fill.
@@ -88,17 +120,17 @@ final class TradeAutomationService {
         realizedPnL: nil
       )
     )
+    persist()
   }
 
-  func loadSampleExecutions() {
+  private func loadCleanBootstrap() {
     executionState = .paused
 
     let calendar = Calendar.current
-    let ethPositionID = UUID()
 
     openPositions = [
       OpenPosition(
-        id: ethPositionID,
+        id: UUID(),
         symbol: "ETH-USD",
         quantity: 0.42,
         averageEntryPrice: 2_450,
@@ -107,7 +139,6 @@ final class TradeAutomationService {
       ),
     ]
 
-    // One real fill from before pause.
     trades = [
       Trade(
         id: UUID(),
@@ -122,23 +153,22 @@ final class TradeAutomationService {
         realizedPnL: nil
       ),
     ]
+  }
 
-    // Bug pattern: automation still appends "trades" at price 0 while paused (intent only).
-    for (index, size) in [0.05, 0.08, 0.12].enumerated() {
-      trades.append(
-        Trade(
-          id: UUID(),
-          symbol: "ETH-USD",
-          side: .buy,
-          quantity: size,
-          executionPrice: 0,
-          executedAt: calendar.date(byAdding: .hour, value: -(index + 1), to: .now)!,
-          orderReference: "AUTO-90\(10 + index)",
-          source: "Rebalance (paused)",
-          status: .skipped,
-          realizedPnL: nil
-        )
+  private func apply(_ snapshot: TradingSnapshot) {
+    executionState = snapshot.executionState
+    trades = snapshot.trades
+    openPositions = snapshot.openPositions
+  }
+
+  private func persist() {
+    TradingPersistence.save(
+      TradingSnapshot(
+        schemaVersion: TradingPersistence.currentSchemaVersion,
+        executionState: executionState,
+        trades: trades,
+        openPositions: openPositions
       )
-    }
+    )
   }
 }

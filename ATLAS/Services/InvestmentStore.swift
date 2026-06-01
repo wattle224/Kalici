@@ -10,7 +10,12 @@ final class InvestmentStore: ObservableObject {
 
     init() {
         loadSampleData()
-        tradeAutomation.loadSampleExecutions()
+        tradeAutomation.bootstrap()
+    }
+
+    func performCleanRestart() {
+        tradeAutomation.performCleanRestart()
+        objectWillChange.send()
     }
 
     var isExecutionPaused: Bool {

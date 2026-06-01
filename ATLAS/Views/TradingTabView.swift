@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TradingTabView: View {
   @EnvironmentObject private var store: InvestmentStore
+  @State private var showCleanRestartConfirm = false
 
   var body: some View {
     NavigationStack {
@@ -16,6 +17,25 @@ struct TradingTabView: View {
         }
       }
       .navigationTitle("Trading")
+      .toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button("Clean restart") {
+            showCleanRestartConfirm = true
+          }
+        }
+      }
+      .confirmationDialog(
+        "Clean restart?",
+        isPresented: $showCleanRestartConfirm,
+        titleVisibility: .visible
+      ) {
+        Button("Reset trading data", role: .destructive) {
+          store.performCleanRestart()
+        }
+        Button("Cancel", role: .cancel) {}
+      } message: {
+        Text("Clears the trade ledger and reloads from a clean state. Removes phantom zero-price fills.")
+      }
       .overlay {
         if store.settledTrades.isEmpty && store.skippedTradesWhilePaused.isEmpty {
           ContentUnavailableView(
