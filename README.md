@@ -19,7 +19,17 @@ Sample data is included for local development and demos.
 - iOS 17.0 or later
 - macOS for building and running on simulator or device
 
-## Getting started
+## Web trading dashboard (port 3000)
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Open http://127.0.0.1:3000/ — trade history fixes apply to **all** symbols (`ETH-USD`, `SKL-USD`, any `*-USD`), not a single pair. Use **Clean restart** to reset persisted ledger data.
+
+## Getting started (iOS)
 
 1. Open `ATLAS.xcodeproj` in Xcode.
 2. Select the **ATLAS** scheme and target.

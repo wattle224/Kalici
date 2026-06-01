@@ -137,6 +137,14 @@ final class TradeAutomationService {
         unrealizedPnL: 71.40,
         quoteCurrency: "GBP"
       ),
+      OpenPosition(
+        id: UUID(),
+        symbol: "SKL-USD",
+        quantity: 12_500,
+        averageEntryPrice: 0.0524,
+        unrealizedPnL: 18.25,
+        quoteCurrency: "GBP"
+      ),
     ]
 
     trades = [
@@ -148,6 +156,18 @@ final class TradeAutomationService {
         executionPrice: 2_450,
         executedAt: calendar.date(byAdding: .day, value: -3, to: .now)!,
         orderReference: "AUTO-9001",
+        source: "DCA",
+        status: .filled,
+        realizedPnL: nil
+      ),
+      Trade(
+        id: UUID(),
+        symbol: "SKL-USD",
+        side: .buy,
+        quantity: 12_500,
+        executionPrice: 0.0524,
+        executedAt: calendar.date(byAdding: .day, value: -2, to: .now)!,
+        orderReference: "AUTO-9002",
         source: "DCA",
         status: .filled,
         realizedPnL: nil

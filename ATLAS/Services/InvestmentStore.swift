@@ -30,8 +30,12 @@ final class InvestmentStore: ObservableObject {
         tradeAutomation.skippedWhilePaused
     }
 
-    var ethPosition: OpenPosition? {
-        tradeAutomation.openPositions.first { $0.symbol == "ETH-USD" }
+    var openPositions: [OpenPosition] {
+        tradeAutomation.openPositions
+    }
+
+    func openPosition(for symbol: String) -> OpenPosition? {
+        tradeAutomation.openPositions.first { $0.symbol == symbol }
     }
 
     var summary: PortfolioSummary {

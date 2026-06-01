@@ -8,7 +8,7 @@ struct TradingTabView: View {
     NavigationStack {
       List {
         executionSection
-        if let position = store.ethPosition {
+        ForEach(store.openPositions, id: \.symbol) { position in
           positionSection(position)
         }
         tradeHistorySection
