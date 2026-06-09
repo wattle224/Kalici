@@ -2,47 +2,50 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  formatCountdown,
-  msUntil,
-  totalRealizedPnL,
-  type PendingRealization,
-} from "@/lib/realization";
+  activitySummary,
+  type PendingAutomation,
+} from "@/lib/automation";
+import { formatCountdown, msUntil, totalRealizedPnL } from "@/lib/realization";
+import { hydrateSnapshot, loadSnapshot } from "@/lib/hydrate";
 import {
   cleanBootstrap,
   formatPnL,
   formatPrice,
-  hydrateSnapshot,
-  loadSnapshot,
   saveSnapshot,
   settledFills,
   skippedWhilePaused,
   tradesForSymbol,
   type OpenPosition,
   type Trade,
-  type TradingSnapshotWithSchedule,
+  type TradingSnapshotWithAutomation,
 } from "@/lib/trading";
 
 const ALL_SYMBOLS = ["ETH-USD", "SKL-USD"] as const;
 
 export default function TradingDashboard() {
-  const [snapshot, setSnapshot] = useState<TradingSnapshotWithSchedule>(() =>
+  const [snapshot, setSnapshot] = useState<TradingSnapshotWithAutomation>(() =>
     loadSnapshot()
   );
-  const [filter, setFilter] = useState<string>("all");
+  const [filter, setFilter] = useState<string>("2h");
   const [now, setNow] = useState(() => Date.now());
 
   const history = useMemo(() => settledFills(snapshot.trades), [snapshot.trades]);
+  const activity = useMemo(
+    () => activitySummary(snapshot.trades, now),
+    [snapshot.trades, now]
+  );
   const skipped = useMemo(
     () => skippedWhilePaused(snapshot.trades),
     [snapshot.trades]
   );
 
   const filteredHistory = useMemo(() => {
+    if (filter === "2h") return activity.trades;
     if (filter === "all") return history;
     return tradesForSymbol(snapshot.trades, filter);
-  }, [filter, history, snapshot.trades]);
+  }, [filter, history, activity.trades, snapshot.trades]);
 
-  const persist = useCallback((next: TradingSnapshotWithSchedule) => {
+  const persist = useCallback((next: TradingSnapshotWithAutomation) => {
     const hydrated = hydrateSnapshot(next);
     setSnapshot(hydrated);
     saveSnapshot(hydrated);
@@ -51,6 +54,14 @@ export default function TradingDashboard() {
   const cleanRestart = useCallback(() => {
     persist(cleanBootstrap());
   }, [persist]);
+
+  const toggleExecution = useCallback(() => {
+    persist({
+      ...snapshot,
+      executionState:
+        snapshot.executionState === "running" ? "paused" : "running",
+    });
+  }, [persist, snapshot]);
 
   useEffect(() => {
     const tick = () => {
@@ -73,23 +84,20 @@ export default function TradingDashboard() {
     [snapshot.trades]
   );
 
-  const pending = snapshot.pendingRealizations ?? [];
-
-  const symbolsInHistory = useMemo(() => {
-    const set = new Set(history.map((t) => t.symbol));
-    return Array.from(set).sort();
-  }, [history]);
+  const pending = snapshot.pendingAutomations ?? [];
 
   return (
     <main>
       <h1>Trading</h1>
       <p className="subtitle">
-        Symbol-agnostic trade history — fixes apply to{" "}
-        <strong>ETH-USD</strong>, <strong>SKL-USD</strong>, and any{" "}
-        <code>*-USD</code> pair.
+        Recurring DCA + take-profit for <strong>ETH-USD</strong> and{" "}
+        <strong>SKL-USD</strong> when execution is running.
       </p>
 
       <div className="toolbar">
+        <button type="button" className="primary" onClick={toggleExecution}>
+          {snapshot.executionState === "running" ? "Pause execution" : "Resume execution"}
+        </button>
         <button type="button" className="danger" onClick={cleanRestart}>
           Clean restart
         </button>
@@ -108,11 +116,28 @@ export default function TradingDashboard() {
           </strong>
           <p className="meta" style={{ margin: "0.25rem 0 0" }}>
             {snapshot.executionState === "paused"
-              ? "Trade history shows confirmed fills only (price > 0). Zero-price rows are skipped intents."
-              : "Automation may place orders and record per-fill execution prices."}
+              ? "No new buys or sells — only 1 trade in 2h is expected while paused."
+              : "DCA ~every 25 min and take-profit ~every 45 min per symbol."}
           </p>
         </div>
       </div>
+
+      <section>
+        <h2>Last 2 hours</h2>
+        <div className="card">
+          <header>
+            <span className="symbol">Activity</span>
+            <span>{activity.total} fills</span>
+          </header>
+          <div className="row">
+            <span className="meta">{activity.buys} buys</span>
+            <span className="meta">{activity.sells} sells</span>
+          </div>
+          <p className="hint" style={{ marginBottom: 0 }}>
+            Expected when running: ~4–6 fills per 2h across ETH + SKL.
+          </p>
+        </div>
+      </section>
 
       <section>
         <h2>Realized P&amp;L</h2>
@@ -127,17 +152,12 @@ export default function TradingDashboard() {
               {formatPnL(realizedTotal)}
             </span>
           </header>
-          <p className="meta" style={{ margin: 0 }}>
-            {realizedTotal !== 0
-              ? "Realized gains recorded on sell fills in trade history."
-              : "Scheduled take-profit sells run within the next 30 minutes for each open position."}
-          </p>
         </div>
-        {pending.length > 0 && (
+        {pending.length > 0 && snapshot.executionState === "running" && (
           <>
-            <p className="hint">Upcoming realizations (within 30 min):</p>
+            <p className="hint">Scheduled automations:</p>
             {pending.map((item) => (
-              <PendingRealizationCard key={item.id} item={item} now={now} />
+              <PendingAutomationCard key={item.id} item={item} now={now} />
             ))}
           </>
         )}
@@ -148,15 +168,18 @@ export default function TradingDashboard() {
         {snapshot.openPositions.map((position) => (
           <PositionCard key={position.symbol} position={position} />
         ))}
-        <p className="hint">
-          Unrealized P&L is shown once per symbol — never duplicated on each
-          trade row.
-        </p>
       </section>
 
       <section>
         <h2>Trade history</h2>
         <div className="tabs">
+          <button
+            type="button"
+            className={filter === "2h" ? "active" : ""}
+            onClick={() => setFilter("2h")}
+          >
+            Last 2h ({activity.total})
+          </button>
           <button
             type="button"
             className={filter === "all" ? "active" : ""}
@@ -171,7 +194,7 @@ export default function TradingDashboard() {
               className={filter === sym ? "active" : ""}
               onClick={() => setFilter(sym)}
             >
-              {sym} ({tradesForSymbol(snapshot.trades, sym).length})
+              {sym}
             </button>
           ))}
         </div>
@@ -183,23 +206,11 @@ export default function TradingDashboard() {
             <TradeCard key={trade.id} trade={trade} />
           ))
         )}
-
-        <p className="hint">
-          Confirmed symbols in history:{" "}
-          {symbolsInHistory.length > 0
-            ? symbolsInHistory.join(", ")
-            : "none"}
-          . Zero-price SKL/ETH rows are excluded.
-        </p>
       </section>
 
       {skipped.length > 0 && (
         <section>
           <h2>Skipped while paused</h2>
-          <p className="meta" style={{ marginBottom: "0.75rem" }}>
-            Not shown in trade history — includes ETH-USD and SKL-USD sizing
-            intents at price 0.
-          </p>
           {skipped.map((trade) => (
             <SkippedCard key={trade.id} trade={trade} />
           ))}
@@ -264,26 +275,26 @@ function TradeCard({ trade }: { trade: Trade }) {
   );
 }
 
-function PendingRealizationCard({
+function PendingAutomationCard({
   item,
   now,
 }: {
-  item: PendingRealization;
+  item: PendingAutomation;
   now: number;
 }) {
   const remaining = msUntil(item.executeAt, now);
-  const est =
-    item.sellPrice > 0
-      ? `sell ${item.quantity.toLocaleString()} @ ${formatPrice(item.sellPrice, item.symbol)}`
-      : "";
   return (
     <div className="card">
       <header>
-        <span className="symbol">{item.symbol}</span>
+        <span>
+          <span className="symbol">{item.symbol}</span>{" "}
+          <span className={`badge ${item.side}`}>{item.side}</span>
+        </span>
         <span className="meta">{formatCountdown(remaining)}</span>
       </header>
       <p className="meta" style={{ margin: 0 }}>
-        {est} · non-zero realized P&amp;L on fill
+        {item.source}: {item.quantity.toLocaleString()} @{" "}
+        {formatPrice(item.price, item.symbol)}
       </p>
     </div>
   );

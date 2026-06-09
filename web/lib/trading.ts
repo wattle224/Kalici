@@ -1,9 +1,4 @@
-import {
-  ensureRealizationSchedule,
-  processDueRealizations,
-  type TradingSnapshotWithSchedule,
-} from "./realization";
-
+export type { TradingSnapshotWithAutomation } from "./automation";
 export type { TradingSnapshotWithSchedule } from "./realization";
 
 export type TradeSide = "buy" | "sell";
@@ -38,7 +33,7 @@ export interface TradingSnapshot {
   openPositions: OpenPosition[];
 }
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 export const STORAGE_KEY = "kalici.trading.snapshot";
 
 /** Applies to every pair: ETH-USD, SKL-USD, BTC-USD, etc. */
@@ -119,7 +114,7 @@ export function cleanBootstrap(): TradingSnapshot {
 
   return {
     schemaVersion: SCHEMA_VERSION,
-    executionState: "paused",
+    executionState: "running",
     openPositions: [
       {
         symbol: "ETH-USD",
@@ -200,34 +195,6 @@ export function cleanBootstrap(): TradingSnapshot {
       },
     ],
   };
-}
-
-export function hydrateSnapshot(
-  snapshot: TradingSnapshotWithSchedule
-): TradingSnapshotWithSchedule {
-  const sanitized = sanitize(snapshot) as TradingSnapshotWithSchedule;
-  const due = processDueRealizations(sanitized);
-  return ensureRealizationSchedule(due);
-}
-
-export function loadSnapshot(): TradingSnapshotWithSchedule {
-  if (typeof window === "undefined") {
-    return ensureRealizationSchedule(cleanBootstrap());
-  }
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return ensureRealizationSchedule(cleanBootstrap());
-    const parsed = JSON.parse(raw) as TradingSnapshotWithSchedule;
-    if (
-      parsed.schemaVersion < SCHEMA_VERSION ||
-      containsCorruptHistory(parsed)
-    ) {
-      return ensureRealizationSchedule(cleanBootstrap());
-    }
-    return hydrateSnapshot(parsed);
-  } catch {
-    return ensureRealizationSchedule(cleanBootstrap());
-  }
 }
 
 export function saveSnapshot(snapshot: TradingSnapshot): void {
