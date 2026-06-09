@@ -165,13 +165,15 @@ export default function TradingDashboard() {
           </strong>
           <p className="meta" style={{ margin: "0.25rem 0 0" }}>
             {execStatus.isOnline
-              ? execStatus.executingNow
-                ? `Executing ${execStatus.dueNowCount} order(s) now…`
-                : `Orders queued: ${execStatus.pendingCount}. Next ${execStatus.nextOrderSide ?? "—"} ${execStatus.nextOrderSymbol ?? ""} ${
-                    execStatus.nextOrderAt
-                      ? formatCountdown(msUntil(execStatus.nextOrderAt, now))
-                      : "soon"
-                  }.`
+              ? activity.total < 2
+                ? `No fills in the last 2h — placing live orders now (${activity.total} recent).`
+                : execStatus.executingNow
+                  ? `Executing ${execStatus.dueNowCount} order(s) now…`
+                  : `Orders queued: ${execStatus.pendingCount}. Next ${execStatus.nextOrderSide ?? "—"} ${execStatus.nextOrderSymbol ?? ""} ${
+                      execStatus.nextOrderAt
+                        ? formatCountdown(msUntil(execStatus.nextOrderAt, now))
+                        : "soon"
+                    }.`
               : "No new buys or sells while OFFLINE."}
           </p>
         </div>
@@ -210,7 +212,7 @@ export default function TradingDashboard() {
               </>
             ) : (
               <p className="hint" style={{ margin: "0.75rem 0 0" }}>
-                First buy ~30s after ONLINE, first sell ~90s. Keep this tab open.
+                Orders execute on page load when ONLINE. Keep this tab open for recurring fills.
               </p>
             )}
           </div>

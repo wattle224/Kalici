@@ -7,9 +7,9 @@ import type { OpenPosition, Trade, TradingSnapshot } from "./trading";
 export const AUTOMATION_WINDOW_MS = 2 * 60 * 60 * 1000;
 export const DCA_INTERVAL_MS = 8 * 60 * 1000;
 export const TAKE_PROFIT_INTERVAL_MS = 12 * 60 * 1000;
-/** First orders after going ONLINE — user expects fills within ~30s. */
-export const KICKSTART_BUY_MS = 30 * 1000;
-export const KICKSTART_SELL_MS = 90 * 1000;
+/** Kickstart orders fire immediately (small stagger so both symbols fill same tick). */
+export const KICKSTART_BUY_MS = 0;
+export const KICKSTART_SELL_MS = 5 * 1000;
 
 export interface PendingAutomation {
   id: string;
@@ -197,7 +197,7 @@ function nextDcaTime(
   kickstart: boolean
 ): number {
   const slot = SYMBOLS.indexOf(symbol as (typeof SYMBOLS)[number]);
-  const stagger = slot * 45 * 1000;
+  const stagger = kickstart ? slot * 2_000 : slot * 45_000;
   if (kickstart) return now + KICKSTART_BUY_MS + stagger;
   return now + DCA_INTERVAL_MS + stagger;
 }
@@ -208,7 +208,7 @@ function nextSellTime(
   kickstart: boolean
 ): number {
   const slot = SYMBOLS.indexOf(symbol as (typeof SYMBOLS)[number]);
-  const stagger = slot * 60 * 1000;
+  const stagger = kickstart ? slot * 3_000 : slot * 60_000;
   if (kickstart) return now + KICKSTART_SELL_MS + stagger;
   return now + TAKE_PROFIT_INTERVAL_MS + stagger;
 }
@@ -291,13 +291,76 @@ export function ensureAutomationSchedule(
   return { ...snapshot, pendingAutomations: pending };
 }
 
+const SEED_ORDER_OFFSETS_MIN: Record<string, number> = {
+  "AUTO-8201": 110,
+  "AUTO-8202": 95,
+  "AUTO-8203": 70,
+  "AUTO-8204": 55,
+  "AUTO-8205": 35,
+  "AUTO-8206": 18,
+};
+
+/** Re-anchor demo seed rows so they stay inside the 2h window (stale ISO timestamps age out). */
+export function reanchorSeedTimestamps(
+  trades: Trade[],
+  now = Date.now()
+): Trade[] {
+  return trades.map((trade) => {
+    const offsetMin = SEED_ORDER_OFFSETS_MIN[trade.orderReference];
+    if (offsetMin == null) return trade;
+    return {
+      ...trade,
+      executedAt: new Date(now - offsetMin * 60_000).toISOString(),
+    };
+  });
+}
+
+/** When ONLINE but history is empty, fill at least one buy per symbol immediately. */
+export function fillGapWhenOnline(
+  snapshot: TradingSnapshotWithAutomation,
+  now = Date.now()
+): TradingSnapshotWithAutomation {
+  if (snapshot.executionState !== "running") return snapshot;
+
+  const recent = tradesInWindow(snapshot.trades, AUTOMATION_WINDOW_MS, now);
+  if (recent.length >= 2) return snapshot;
+
+  let next = snapshot;
+  for (const symbol of SYMBOLS) {
+    const hasRecent = recent.some((t) => t.symbol === symbol);
+    if (hasRecent) continue;
+
+    const position = next.openPositions.find((p) => p.symbol === symbol);
+    const basePrice =
+      position?.averageEntryPrice ?? (symbol.startsWith("SKL") ? 0.0524 : 2450);
+
+    next = applyAutomation(next, {
+      id: `live-buy-${symbol}-${now}`,
+      symbol,
+      side: "buy",
+      quantity: dcaQuantity(symbol),
+      price: quotePrice(symbol, basePrice, 1.005),
+      executeAt: new Date(now).toISOString(),
+      source: "Live fill (ONLINE)",
+    });
+  }
+
+  return next;
+}
+
 /** Seed realistic activity inside the last 2 hours for demo/history. */
 export function seedRecentActivity(
   snapshot: TradingSnapshotWithAutomation,
   now = Date.now()
 ): TradingSnapshotWithAutomation {
-  const recent = tradesInWindow(snapshot.trades, AUTOMATION_WINDOW_MS, now);
-  if (recent.length >= 6) return snapshot;
+  const tradesWithFreshSeeds = reanchorSeedTimestamps(snapshot.trades, now);
+  const reanchoredSnapshot = { ...snapshot, trades: tradesWithFreshSeeds };
+  const recent = tradesInWindow(
+    reanchoredSnapshot.trades,
+    AUTOMATION_WINDOW_MS,
+    now
+  );
+  if (recent.length >= 6) return reanchoredSnapshot;
 
   const seeds: Array<Omit<Trade, "id">> = [
     {
@@ -368,15 +431,17 @@ export function seedRecentActivity(
     },
   ];
 
-  const existingRefs = new Set(snapshot.trades.map((t) => t.orderReference));
+  const existingRefs = new Set(
+    reanchoredSnapshot.trades.map((t) => t.orderReference)
+  );
   const toAdd = seeds
     .filter((s) => !existingRefs.has(s.orderReference))
     .map((s, i) => ({ ...s, id: `seed-${i}-${now}` }));
 
-  if (toAdd.length === 0) return snapshot;
+  if (toAdd.length === 0) return reanchoredSnapshot;
 
   return {
-    ...snapshot,
-    trades: [...snapshot.trades, ...toAdd],
+    ...reanchoredSnapshot,
+    trades: [...reanchoredSnapshot.trades, ...toAdd],
   };
 }
