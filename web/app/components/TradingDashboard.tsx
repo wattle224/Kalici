@@ -12,7 +12,7 @@ import { ACTIVE_MARKET } from "@/lib/symbols";
 import OrderHistoryTable from "./OrderHistoryTable";
 import {
   cleanBootstrap,
-  formatPnL,
+  clearTradingStorage,
   saveSnapshot,
   settledFills,
   type TradingSnapshotWithAutomation,
@@ -37,6 +37,7 @@ export default function TradingDashboard() {
   }, []);
 
   const cleanRestart = useCallback(() => {
+    clearTradingStorage();
     persist(cleanBootstrap());
   }, [persist]);
 

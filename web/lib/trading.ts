@@ -40,6 +40,20 @@ export interface TradingSnapshot {
 export const SCHEMA_VERSION = 8;
 export const STORAGE_KEY = "kalici.trading.v8";
 
+/** Older ledger keys — wiped on clean restart. */
+export const LEGACY_STORAGE_KEYS = [
+  "kalici.trading.snapshot",
+  "kalici.trading.v7",
+  STORAGE_KEY,
+] as const;
+
+export function clearTradingStorage(): void {
+  if (typeof window === "undefined") return;
+  for (const key of LEGACY_STORAGE_KEYS) {
+    localStorage.removeItem(key);
+  }
+}
+
 /** Applies to every pair: ETH-USD, SKL-USD, BTC-USD, etc. */
 export function isSettledFill(trade: Trade): boolean {
   return (
