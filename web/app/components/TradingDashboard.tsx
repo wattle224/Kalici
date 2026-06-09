@@ -5,6 +5,13 @@ import {
   activitySummary,
   type PendingAutomation,
 } from "@/lib/automation";
+import {
+  buildMarketTickers,
+  filterPositionsByGainers,
+  filterTradesByGainers,
+  gainers,
+} from "@/lib/market";
+import TickerBanner from "./TickerBanner";
 import { formatCountdown, msUntil, totalRealizedPnL } from "@/lib/realization";
 import { hydrateSnapshot, loadSnapshot } from "@/lib/hydrate";
 import {
@@ -39,11 +46,28 @@ export default function TradingDashboard() {
     [snapshot.trades]
   );
 
+  const tickers = useMemo(
+    () => buildMarketTickers(snapshot.openPositions),
+    [snapshot.openPositions]
+  );
+  const gainerList = useMemo(() => gainers(tickers), [tickers]);
+
   const filteredHistory = useMemo(() => {
-    if (filter === "2h") return activity.trades;
-    if (filter === "all") return history;
-    return tradesForSymbol(snapshot.trades, filter);
-  }, [filter, history, activity.trades, snapshot.trades]);
+    let rows: Trade[];
+    if (filter === "2h") rows = activity.trades;
+    else if (filter === "all") rows = history;
+    else if (filter === "gainers")
+      rows = filterTradesByGainers(history, tickers);
+    else rows = tradesForSymbol(snapshot.trades, filter);
+    return rows;
+  }, [filter, history, activity.trades, snapshot.trades, tickers]);
+
+  const visiblePositions = useMemo(() => {
+    if (filter === "gainers") {
+      return filterPositionsByGainers(snapshot.openPositions, tickers);
+    }
+    return snapshot.openPositions;
+  }, [filter, snapshot.openPositions, tickers]);
 
   const persist = useCallback((next: TradingSnapshotWithAutomation) => {
     const hydrated = hydrateSnapshot(next);
@@ -104,7 +128,7 @@ export default function TradingDashboard() {
       </div>
 
       <div
-        className={`banner ${snapshot.executionState === "paused" ? "paused" : "running"}`}
+        className={`execution-banner ${snapshot.executionState === "paused" ? "paused" : "running"}`}
       >
         <span style={{ fontSize: "1.25rem" }}>
           {snapshot.executionState === "paused" ? "⏸" : "▶"}
@@ -165,9 +189,13 @@ export default function TradingDashboard() {
 
       <section>
         <h2>Open positions</h2>
-        {snapshot.openPositions.map((position) => (
-          <PositionCard key={position.symbol} position={position} />
-        ))}
+        {visiblePositions.length === 0 ? (
+          <p className="meta">No gainer positions match this filter.</p>
+        ) : (
+          visiblePositions.map((position) => (
+            <PositionCard key={position.symbol} position={position} />
+          ))
+        )}
       </section>
 
       <section>
@@ -186,6 +214,13 @@ export default function TradingDashboard() {
             onClick={() => setFilter("all")}
           >
             All ({history.length})
+          </button>
+          <button
+            type="button"
+            className={filter === "gainers" ? "active" : ""}
+            onClick={() => setFilter("gainers")}
+          >
+            Gainers ({gainerList.length})
           </button>
           {ALL_SYMBOLS.map((sym) => (
             <button
@@ -216,6 +251,11 @@ export default function TradingDashboard() {
           ))}
         </section>
       )}
+
+      <TickerBanner
+        positions={snapshot.openPositions}
+        highlightGainersOnly={filter === "gainers"}
+      />
     </main>
   );
 }

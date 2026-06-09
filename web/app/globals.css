@@ -15,6 +15,7 @@
 
 body {
   margin: 0;
+  padding-bottom: 2.75rem;
   font-family:
     system-ui,
     -apple-system,
@@ -47,7 +48,7 @@ h1 {
   font-size: 0.9rem;
 }
 
-.banner {
+.execution-banner {
   display: flex;
   gap: 0.75rem;
   align-items: flex-start;
@@ -58,12 +59,90 @@ h1 {
   border: 1px solid #2a3544;
 }
 
-.banner.paused {
+.execution-banner.paused {
   border-color: var(--orange);
 }
 
-.banner.running {
+.execution-banner.running {
   border-color: var(--green);
+}
+
+/* Bottom ticker — continuous left-to-right scroll (not blink) */
+.ticker-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 2.75rem;
+  background: #121a24;
+  border-top: 1px solid #2a3544;
+  overflow: hidden;
+}
+
+.ticker-label {
+  flex-shrink: 0;
+  padding: 0 0.75rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--green);
+  border-right: 1px solid #2a3544;
+}
+
+.ticker-viewport {
+  flex: 1;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker-ltr 45s linear infinite;
+  will-change: transform;
+}
+
+.ticker-segment {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2rem;
+  padding-right: 2rem;
+}
+
+.ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  font-size: 0.8rem;
+}
+
+.ticker-item strong {
+  font-weight: 600;
+}
+
+.ticker-price {
+  color: var(--muted);
+}
+
+.ticker-empty {
+  padding: 0 1rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+@keyframes ticker-ltr {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0);
+  }
 }
 
 section {
