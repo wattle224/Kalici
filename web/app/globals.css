@@ -264,3 +264,149 @@ button.danger {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* Share feedback */
+.feedback-fab {
+  position: fixed;
+  right: 1rem;
+  bottom: 3.25rem;
+  z-index: 110;
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.feedback-fab:hover {
+  filter: brightness(1.08);
+}
+
+.feedback-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.feedback-modal {
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid #2a3544;
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+
+.feedback-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.feedback-header h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.feedback-close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: 0.25rem 0.5rem;
+}
+
+.feedback-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.feedback-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.feedback-label select,
+.feedback-label textarea,
+.feedback-label input {
+  background: var(--bg);
+  border: 1px solid #3a4a5e;
+  border-radius: 6px;
+  color: var(--text);
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+}
+
+.feedback-label textarea {
+  resize: vertical;
+  min-height: 6rem;
+}
+
+.feedback-rating {
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.feedback-rating legend {
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 0.35rem;
+}
+
+.feedback-stars {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.feedback-stars button {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 1.35rem;
+  padding: 0.15rem;
+  line-height: 1;
+}
+
+.feedback-stars button.active {
+  color: var(--orange);
+}
+
+.feedback-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.feedback-error {
+  color: var(--red);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.feedback-success {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.feedback-note {
+  margin: 0;
+}

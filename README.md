@@ -29,6 +29,8 @@ npm run dev
 
 Open http://127.0.0.1:3000/ — trade history fixes apply to **all** symbols (`ETH-USD`, `SKL-USD`, any `*-USD`), not a single pair. Use **Clean restart** to reset persisted ledger data.
 
+**Share feedback** — floating button opens an interactive form. Emails go to `sbarryfr@gmail.com` with subject `[Kalici Trading Feedback] {category} — {preview}`. Copy `web/.env.example` to `web/.env.local` and set Gmail SMTP (app password) for server-side send; otherwise the mail app opens with a pre-filled draft.
+
 ## Getting started (iOS)
 
 1. Open `ATLAS.xcodeproj` in Xcode.
