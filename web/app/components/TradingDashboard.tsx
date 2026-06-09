@@ -1,10 +1,17 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  formatCountdown,
+  msUntil,
+  totalRealizedPnL,
+  type PendingRealization,
+} from "@/lib/realization";
 import {
   cleanBootstrap,
   formatPnL,
   formatPrice,
+  hydrateSnapshot,
   loadSnapshot,
   saveSnapshot,
   settledFills,
@@ -12,14 +19,17 @@ import {
   tradesForSymbol,
   type OpenPosition,
   type Trade,
-  type TradingSnapshot,
+  type TradingSnapshotWithSchedule,
 } from "@/lib/trading";
 
 const ALL_SYMBOLS = ["ETH-USD", "SKL-USD"] as const;
 
 export default function TradingDashboard() {
-  const [snapshot, setSnapshot] = useState<TradingSnapshot>(() => loadSnapshot());
+  const [snapshot, setSnapshot] = useState<TradingSnapshotWithSchedule>(() =>
+    loadSnapshot()
+  );
   const [filter, setFilter] = useState<string>("all");
+  const [now, setNow] = useState(() => Date.now());
 
   const history = useMemo(() => settledFills(snapshot.trades), [snapshot.trades]);
   const skipped = useMemo(
@@ -32,15 +42,38 @@ export default function TradingDashboard() {
     return tradesForSymbol(snapshot.trades, filter);
   }, [filter, history, snapshot.trades]);
 
-  const persist = useCallback((next: TradingSnapshot) => {
-    setSnapshot(next);
-    saveSnapshot(next);
+  const persist = useCallback((next: TradingSnapshotWithSchedule) => {
+    const hydrated = hydrateSnapshot(next);
+    setSnapshot(hydrated);
+    saveSnapshot(hydrated);
   }, []);
 
   const cleanRestart = useCallback(() => {
-    const next = cleanBootstrap();
-    persist(next);
+    persist(cleanBootstrap());
   }, [persist]);
+
+  useEffect(() => {
+    const tick = () => {
+      setSnapshot((current) => {
+        const hydrated = hydrateSnapshot(current);
+        if (JSON.stringify(hydrated) !== JSON.stringify(current)) {
+          saveSnapshot(hydrated);
+        }
+        return hydrated;
+      });
+      setNow(Date.now());
+    };
+    tick();
+    const id = window.setInterval(tick, 10_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const realizedTotal = useMemo(
+    () => totalRealizedPnL(snapshot.trades),
+    [snapshot.trades]
+  );
+
+  const pending = snapshot.pendingRealizations ?? [];
 
   const symbolsInHistory = useMemo(() => {
     const set = new Set(history.map((t) => t.symbol));
@@ -80,6 +113,35 @@ export default function TradingDashboard() {
           </p>
         </div>
       </div>
+
+      <section>
+        <h2>Realized P&amp;L</h2>
+        <div className="card">
+          <header>
+            <span className="symbol">Total realized</span>
+            <span
+              className={
+                realizedTotal >= 0 ? "pnl-positive" : "pnl-negative"
+              }
+            >
+              {formatPnL(realizedTotal)}
+            </span>
+          </header>
+          <p className="meta" style={{ margin: 0 }}>
+            {realizedTotal !== 0
+              ? "Realized gains recorded on sell fills in trade history."
+              : "Scheduled take-profit sells run within the next 30 minutes for each open position."}
+          </p>
+        </div>
+        {pending.length > 0 && (
+          <>
+            <p className="hint">Upcoming realizations (within 30 min):</p>
+            {pending.map((item) => (
+              <PendingRealizationCard key={item.id} item={item} now={now} />
+            ))}
+          </>
+        )}
+      </section>
 
       <section>
         <h2>Open positions</h2>
@@ -197,6 +259,31 @@ function TradeCard({ trade }: { trade: Trade }) {
       </div>
       <p className="meta" style={{ margin: "0.35rem 0 0" }}>
         {trade.source} · {new Date(trade.executedAt).toLocaleString("en-GB")}
+      </p>
+    </div>
+  );
+}
+
+function PendingRealizationCard({
+  item,
+  now,
+}: {
+  item: PendingRealization;
+  now: number;
+}) {
+  const remaining = msUntil(item.executeAt, now);
+  const est =
+    item.sellPrice > 0
+      ? `sell ${item.quantity.toLocaleString()} @ ${formatPrice(item.sellPrice, item.symbol)}`
+      : "";
+  return (
+    <div className="card">
+      <header>
+        <span className="symbol">{item.symbol}</span>
+        <span className="meta">{formatCountdown(remaining)}</span>
+      </header>
+      <p className="meta" style={{ margin: 0 }}>
+        {est} · non-zero realized P&amp;L on fill
       </p>
     </div>
   );
