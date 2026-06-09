@@ -33,7 +33,7 @@ export interface TradingSnapshot {
   openPositions: OpenPosition[];
 }
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 export const STORAGE_KEY = "kalici.trading.snapshot";
 
 /** Applies to every pair: ETH-USD, SKL-USD, BTC-USD, etc. */

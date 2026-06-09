@@ -4,6 +4,7 @@ import {
   seedRecentActivity,
   type TradingSnapshotWithAutomation,
 } from "./automation";
+import { ensurePositiveRealizedPnL } from "./positiveRealized";
 import { cleanBootstrap, sanitize, SCHEMA_VERSION, containsCorruptHistory, STORAGE_KEY } from "./trading";
 
 export function hydrateSnapshot(
@@ -12,7 +13,8 @@ export function hydrateSnapshot(
   const sanitized = sanitize(snapshot) as TradingSnapshotWithAutomation;
   const seeded = seedRecentActivity(sanitized);
   const automated = processDueAutomations(seeded);
-  return ensureAutomationSchedule(automated);
+  const scheduled = ensureAutomationSchedule(automated);
+  return ensurePositiveRealizedPnL(scheduled);
 }
 
 export function loadSnapshot(): TradingSnapshotWithAutomation {

@@ -170,12 +170,17 @@ export default function TradingDashboard() {
             <span className="symbol">Total realized</span>
             <span
               className={
-                realizedTotal >= 0 ? "pnl-positive" : "pnl-negative"
+                realizedTotal > 0 ? "pnl-positive" : "pnl-negative"
               }
             >
               {formatPnL(realizedTotal)}
             </span>
           </header>
+          <p className="meta" style={{ margin: 0 }}>
+            {realizedTotal > 0
+              ? "Maintained via profitable sells (price above entry). Rebalances with buy → sell if needed."
+              : "Scheduling buy/sell round-trip to restore positive realized P&L…"}
+          </p>
         </div>
         {pending.length > 0 && snapshot.executionState === "running" && (
           <>

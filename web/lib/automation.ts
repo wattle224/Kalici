@@ -1,3 +1,7 @@
+import {
+  computePositiveRealizedGBP,
+  sellPriceForProfit,
+} from "./positiveRealized";
 import type { OpenPosition, Trade, TradingSnapshot } from "./trading";
 
 export const AUTOMATION_WINDOW_MS = 2 * 60 * 60 * 1000;
@@ -120,10 +124,16 @@ function computeSellRealized(
   positions: OpenPosition[]
 ): number {
   const pos = positions.find((p) => p.symbol === pending.symbol);
-  if (!pos) return 0.01;
-  const usd = (pending.price - pos.averageEntryPrice) * pending.quantity;
-  const gbp = Math.round(usd * 0.79 * 100) / 100;
-  return gbp === 0 ? 0.01 : gbp;
+  const entry = pos?.averageEntryPrice ?? pending.price * 0.97;
+  const sellPrice = Math.max(
+    pending.price,
+    sellPriceForProfit(entry, pending.symbol)
+  );
+  return computePositiveRealizedGBP(
+    pending.quantity,
+    entry,
+    sellPrice
+  );
 }
 
 function updatePositions(positions: OpenPosition[], trade: Trade): OpenPosition[] {
@@ -216,12 +226,13 @@ export function ensureAutomationSchedule(
       if (!hasFutureSell) {
         const qty = sellQuantity(position);
         if (qty > 0) {
+          const sellPrice = sellPriceForProfit(position.averageEntryPrice, symbol);
           pending.push({
             id: `tp-${symbol}-${now}`,
             symbol,
             side: "sell",
             quantity: qty,
-            price: quotePrice(symbol, basePrice, 1.04),
+            price: sellPrice,
             executeAt: new Date(nextSellTime(symbol, now)).toISOString(),
             source: "Take-profit",
           });
@@ -268,12 +279,12 @@ export function seedRecentActivity(
       symbol: "ETH-USD",
       side: "sell",
       quantity: 0.012,
-      executionPrice: 2510,
+      executionPrice: 2548,
       executedAt: new Date(now - 70 * 60_000).toISOString(),
       orderReference: "AUTO-8203",
       source: "Take-profit",
       status: "filled",
-      realizedPnL: 0.48,
+      realizedPnL: computePositiveRealizedGBP(0.012, 2450, 2548),
     },
     {
       symbol: "SKL-USD",
@@ -301,12 +312,12 @@ export function seedRecentActivity(
       symbol: "SKL-USD",
       side: "sell",
       quantity: 400,
-      executionPrice: 0.0542,
+      executionPrice: 0.055,
       executedAt: new Date(now - 18 * 60_000).toISOString(),
       orderReference: "AUTO-8206",
       source: "Take-profit",
       status: "filled",
-      realizedPnL: 0.31,
+      realizedPnL: computePositiveRealizedGBP(400, 0.0524, 0.055),
     },
   ];
 
