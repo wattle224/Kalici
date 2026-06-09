@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { activitySummary } from "@/lib/automation";
+import { getExecutionStatus } from "@/lib/executionStatus";
 import { hydrateSnapshot } from "@/lib/hydrate";
 import { totalRealizedPnL } from "@/lib/realization";
 import {
@@ -23,7 +24,14 @@ export async function GET() {
   const history = settledFills(memoryStore.trades);
   const activity = activitySummary(memoryStore.trades, now);
   const symbols = [...new Set(history.map((t) => t.symbol))].sort();
+  const execution = getExecutionStatus(
+    memoryStore.executionState,
+    memoryStore.trades,
+    memoryStore.pendingAutomations,
+    now
+  );
   return NextResponse.json({
+    execution,
     executionState: memoryStore.executionState,
     openPositions: memoryStore.openPositions,
     tradeHistory: history,
@@ -32,7 +40,7 @@ export async function GET() {
     pendingAutomations: memoryStore.pendingAutomations ?? [],
     totalRealizedPnL: totalRealizedPnL(memoryStore.trades),
     symbols,
-    note: "When running: DCA ~25min and take-profit ~45min per symbol. Expect ~4-6 fills per 2h.",
+    note: "When ONLINE: first buy ~30s, first sell ~90s, then DCA ~8min and take-profit ~12min per symbol.",
   });
 }
 

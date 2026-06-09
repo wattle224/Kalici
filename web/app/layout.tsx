@@ -3,8 +3,8 @@ import ClientShell from "./components/ClientShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Kalici Trading",
-  description: "Investment automation — trading dashboard",
+  title: "Kalici Trading — XRP-USD",
+  description: "Local XRP-USD execution and order history",
 };
 
 export default function RootLayout({
