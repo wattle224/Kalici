@@ -67,6 +67,15 @@ h1 {
   border-color: var(--green);
 }
 
+.execution-online-label {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  letter-spacing: 0.04em;
+}
+
+.execution-banner.running .execution-online-label {
+  color: var(--green);
+}
+
 /* Bottom ticker — continuous left-to-right scroll (not blink) */
 .ticker-bar {
   position: fixed;

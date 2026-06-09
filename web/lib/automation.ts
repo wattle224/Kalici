@@ -5,8 +5,11 @@ import {
 import type { OpenPosition, Trade, TradingSnapshot } from "./trading";
 
 export const AUTOMATION_WINDOW_MS = 2 * 60 * 60 * 1000;
-export const DCA_INTERVAL_MS = 25 * 60 * 1000;
-export const TAKE_PROFIT_INTERVAL_MS = 45 * 60 * 1000;
+export const DCA_INTERVAL_MS = 8 * 60 * 1000;
+export const TAKE_PROFIT_INTERVAL_MS = 12 * 60 * 1000;
+/** First orders after going ONLINE — user expects fills within ~30s. */
+export const KICKSTART_BUY_MS = 30 * 1000;
+export const KICKSTART_SELL_MS = 90 * 1000;
 
 export interface PendingAutomation {
   id: string;
@@ -172,27 +175,71 @@ export function processDueAutomations(
   return next;
 }
 
-function nextDcaTime(symbol: string, now: number): number {
-  const slot = SYMBOLS.indexOf(symbol as (typeof SYMBOLS)[number]);
-  const stagger = slot * 8 * 60 * 1000;
-  return now + DCA_INTERVAL_MS / 2 + stagger;
+function hasRecentAutomation(
+  snapshot: TradingSnapshotWithAutomation,
+  now: number,
+  windowMs = 15 * 60 * 1000
+): boolean {
+  if (snapshot.lastAutomationAt) {
+    return now - new Date(snapshot.lastAutomationAt).getTime() < windowMs;
+  }
+  return snapshot.trades.some(
+    (t) =>
+      t.status === "filled" &&
+      t.executionPrice > 0 &&
+      now - new Date(t.executedAt).getTime() < windowMs
+  );
 }
 
-function nextSellTime(symbol: string, now: number): number {
+function nextDcaTime(
+  symbol: string,
+  now: number,
+  kickstart: boolean
+): number {
   const slot = SYMBOLS.indexOf(symbol as (typeof SYMBOLS)[number]);
-  const stagger = slot * 12 * 60 * 1000;
-  return now + TAKE_PROFIT_INTERVAL_MS / 2 + stagger;
+  const stagger = slot * 45 * 1000;
+  if (kickstart) return now + KICKSTART_BUY_MS + stagger;
+  return now + DCA_INTERVAL_MS + stagger;
+}
+
+function nextSellTime(
+  symbol: string,
+  now: number,
+  kickstart: boolean
+): number {
+  const slot = SYMBOLS.indexOf(symbol as (typeof SYMBOLS)[number]);
+  const stagger = slot * 60 * 1000;
+  if (kickstart) return now + KICKSTART_SELL_MS + stagger;
+  return now + TAKE_PROFIT_INTERVAL_MS + stagger;
+}
+
+/** When ONLINE, ensure orders are queued within minutes — not empty queue. */
+export function kickstartExecution(
+  snapshot: TradingSnapshotWithAutomation,
+  now = Date.now()
+): TradingSnapshotWithAutomation {
+  return ensureAutomationSchedule(snapshot, now, true);
 }
 
 export function ensureAutomationSchedule(
   snapshot: TradingSnapshotWithAutomation,
-  now = Date.now()
+  now = Date.now(),
+  forceKickstart = false
 ): TradingSnapshotWithAutomation {
   if (snapshot.executionState !== "running") {
     return { ...snapshot, pendingAutomations: [] };
   }
 
-  const pending = [...(snapshot.pendingAutomations ?? [])];
+  let pending = [...(snapshot.pendingAutomations ?? [])];
+  const kickstart =
+    forceKickstart ||
+    !hasRecentAutomation(snapshot, now) ||
+    !pending.some((p) => new Date(p.executeAt).getTime() < now + 5 * 60 * 1000);
+
+  // Stale far-future queue blocks kickstart — replace with near-term orders when ONLINE.
+  if (kickstart) {
+    pending = pending.filter((p) => new Date(p.executeAt).getTime() <= now);
+  }
 
   for (const symbol of SYMBOLS) {
     const position = snapshot.openPositions.find((p) => p.symbol === symbol);
@@ -211,8 +258,8 @@ export function ensureAutomationSchedule(
         side: "buy",
         quantity: dcaQuantity(symbol),
         price: quotePrice(symbol, basePrice, 1.005),
-        executeAt: new Date(nextDcaTime(symbol, now)).toISOString(),
-        source: "DCA",
+        executeAt: new Date(nextDcaTime(symbol, now, kickstart)).toISOString(),
+        source: kickstart ? "DCA (kickstart)" : "DCA",
       });
     }
 
@@ -233,8 +280,8 @@ export function ensureAutomationSchedule(
             side: "sell",
             quantity: qty,
             price: sellPrice,
-            executeAt: new Date(nextSellTime(symbol, now)).toISOString(),
-            source: "Take-profit",
+            executeAt: new Date(nextSellTime(symbol, now, kickstart)).toISOString(),
+            source: kickstart ? "Take-profit (kickstart)" : "Take-profit",
           });
         }
       }

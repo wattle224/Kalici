@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   activitySummary,
+  kickstartExecution,
   type PendingAutomation,
 } from "@/lib/automation";
+import { getExecutionStatus } from "@/lib/executionStatus";
 import {
   buildMarketTickers,
   filterPositionsByGainers,
@@ -82,11 +84,15 @@ export default function TradingDashboard() {
   }, [persist]);
 
   const toggleExecution = useCallback(() => {
-    persist({
+    const goingOnline = snapshot.executionState === "paused";
+    let next: TradingSnapshotWithAutomation = {
       ...snapshot,
-      executionState:
-        snapshot.executionState === "running" ? "paused" : "running",
-    });
+      executionState: goingOnline ? "running" : "paused",
+    };
+    if (goingOnline) {
+      next = kickstartExecution({ ...next, pendingAutomations: [] });
+    }
+    persist(next);
   }, [persist, snapshot]);
 
   useEffect(() => {
@@ -101,9 +107,10 @@ export default function TradingDashboard() {
       setNow(Date.now());
     };
     tick();
-    const id = window.setInterval(tick, 10_000);
+    const pollMs = snapshot.executionState === "running" ? 5_000 : 10_000;
+    const id = window.setInterval(tick, pollMs);
     return () => window.clearInterval(id);
-  }, []);
+  }, [snapshot.executionState]);
 
   const realizedTotal = useMemo(
     () => totalRealizedPnL(snapshot.trades),
@@ -111,6 +118,23 @@ export default function TradingDashboard() {
   );
 
   const pending = snapshot.pendingAutomations ?? [];
+  const liveFills = useMemo(
+    () =>
+      settledFills(snapshot.trades).filter(
+        (t) => now - new Date(t.executedAt).getTime() < 15 * 60_000
+      ),
+    [snapshot.trades, now]
+  );
+  const execStatus = useMemo(
+    () =>
+      getExecutionStatus(
+        snapshot.executionState,
+        snapshot.trades,
+        pending,
+        now
+      ),
+    [snapshot.executionState, snapshot.trades, pending, now]
+  );
 
   return (
     <main>
@@ -130,23 +154,68 @@ export default function TradingDashboard() {
       </div>
 
       <div
-        className={`execution-banner ${snapshot.executionState === "paused" ? "paused" : "running"}`}
+        className={`execution-banner ${execStatus.isOnline ? "running" : "paused"}`}
       >
         <span style={{ fontSize: "1.25rem" }}>
-          {snapshot.executionState === "paused" ? "⏸" : "▶"}
+          {execStatus.isOnline ? "●" : "○"}
         </span>
         <div>
-          <strong>
-            Execution{" "}
-            {snapshot.executionState === "paused" ? "paused" : "running"}
+          <strong className="execution-online-label">
+            EXECUTION = {execStatus.label}
           </strong>
           <p className="meta" style={{ margin: "0.25rem 0 0" }}>
-            {snapshot.executionState === "paused"
-              ? "No new buys or sells — only 1 trade in 2h is expected while paused."
-              : "DCA ~every 25 min and take-profit ~every 45 min per symbol."}
+            {execStatus.isOnline
+              ? execStatus.executingNow
+                ? `Executing ${execStatus.dueNowCount} order(s) now…`
+                : `Orders queued: ${execStatus.pendingCount}. Next ${execStatus.nextOrderSide ?? "—"} ${execStatus.nextOrderSymbol ?? ""} ${
+                    execStatus.nextOrderAt
+                      ? formatCountdown(msUntil(execStatus.nextOrderAt, now))
+                      : "soon"
+                  }.`
+              : "No new buys or sells while OFFLINE."}
           </p>
         </div>
       </div>
+
+      {execStatus.isOnline && (
+        <section>
+          <h2>Live execution</h2>
+          <div className="card">
+            <div className="row">
+              <span className="meta">Status</span>
+              <span className={execStatus.executingNow ? "pnl-positive" : ""}>
+                {execStatus.executingNow ? "FILLING ORDERS" : "WAITING FOR SCHEDULE"}
+              </span>
+            </div>
+            <div className="row">
+              <span className="meta">Last fill</span>
+              <span>
+                {execStatus.lastFillAt
+                  ? new Date(execStatus.lastFillAt).toLocaleString("en-GB")
+                  : "None yet — first order ~30s after ONLINE"}
+              </span>
+            </div>
+            <div className="row">
+              <span className="meta">Queued</span>
+              <span>{execStatus.pendingCount} orders</span>
+            </div>
+            {liveFills.length > 0 ? (
+              <>
+                <p className="meta" style={{ margin: "0.75rem 0 0.35rem" }}>
+                  Recent fills (last 15 min)
+                </p>
+                {liveFills.slice(0, 5).map((trade) => (
+                  <TradeCard key={trade.id} trade={trade} />
+                ))}
+              </>
+            ) : (
+              <p className="hint" style={{ margin: "0.75rem 0 0" }}>
+                First buy ~30s after ONLINE, first sell ~90s. Keep this tab open.
+              </p>
+            )}
+          </div>
+        </section>
+      )}
 
       <section>
         <h2>Price chart</h2>
