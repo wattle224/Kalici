@@ -12,6 +12,7 @@ import {
   gainers,
 } from "@/lib/market";
 import TickerBanner from "./TickerBanner";
+import TradingChart from "./TradingChart";
 import { formatCountdown, msUntil, totalRealizedPnL } from "@/lib/realization";
 import { hydrateSnapshot, loadSnapshot } from "@/lib/hydrate";
 import {
@@ -34,6 +35,7 @@ export default function TradingDashboard() {
     loadSnapshot()
   );
   const [filter, setFilter] = useState<string>("2h");
+  const [chartSymbol, setChartSymbol] = useState<string>("ETH-USD");
   const [now, setNow] = useState(() => Date.now());
 
   const history = useMemo(() => settledFills(snapshot.trades), [snapshot.trades]);
@@ -145,6 +147,23 @@ export default function TradingDashboard() {
           </p>
         </div>
       </div>
+
+      <section>
+        <h2>Price chart</h2>
+        <div className="tabs" style={{ marginBottom: "0.75rem" }}>
+          {ALL_SYMBOLS.map((sym) => (
+            <button
+              key={sym}
+              type="button"
+              className={chartSymbol === sym ? "active" : ""}
+              onClick={() => setChartSymbol(sym)}
+            >
+              {sym}
+            </button>
+          ))}
+        </div>
+        <TradingChart trades={history} symbol={chartSymbol} />
+      </section>
 
       <section>
         <h2>Last 2 hours</h2>
