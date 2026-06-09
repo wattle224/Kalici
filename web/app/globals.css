@@ -48,6 +48,71 @@ h1 {
   font-size: 0.9rem;
 }
 
+.app-id {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+
+.order-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #2a3544;
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.order-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.order-table th,
+.order-table td {
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #2a3544;
+  white-space: nowrap;
+}
+
+.order-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: none;
+}
+
+.order-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.order-table .side-buy {
+  color: var(--green);
+}
+
+.order-table .side-sell {
+  color: var(--red);
+}
+
+.order-table .status-filled {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.realised-pnl-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.realised-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .execution-banner {
   display: flex;
   gap: 0.75rem;

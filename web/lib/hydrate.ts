@@ -7,7 +7,13 @@ import {
   type TradingSnapshotWithAutomation,
 } from "./automation";
 import { ensurePositiveRealizedPnL } from "./positiveRealized";
-import { cleanBootstrap, sanitize, SCHEMA_VERSION, containsCorruptHistory, STORAGE_KEY } from "./trading";
+import {
+  cleanBootstrap,
+  sanitize,
+  containsCorruptHistory,
+  isLegacySnapshot,
+  STORAGE_KEY,
+} from "./trading";
 
 function needsKickstart(
   snapshot: TradingSnapshotWithAutomation,
@@ -41,7 +47,7 @@ export function loadSnapshot(): TradingSnapshotWithAutomation {
     if (!raw) return hydrateSnapshot(cleanBootstrap());
     const parsed = JSON.parse(raw) as TradingSnapshotWithAutomation;
     if (
-      parsed.schemaVersion < SCHEMA_VERSION ||
+      isLegacySnapshot(parsed) ||
       containsCorruptHistory(parsed)
     ) {
       return hydrateSnapshot(cleanBootstrap());

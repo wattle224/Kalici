@@ -2,6 +2,7 @@ import {
   computePositiveRealizedGBP,
   sellPriceForProfit,
 } from "./positiveRealized";
+import { TRADING_SYMBOLS } from "./symbols";
 import type { OpenPosition, Trade, TradingSnapshot } from "./trading";
 
 export const AUTOMATION_WINDOW_MS = 2 * 60 * 60 * 1000;
@@ -27,7 +28,7 @@ export interface TradingSnapshotWithAutomation extends TradingSnapshot {
   lastAutomationAt?: string;
 }
 
-const SYMBOLS = ["ETH-USD", "SKL-USD"] as const;
+const SYMBOLS = TRADING_SYMBOLS;
 
 export function tradesInWindow(
   trades: Trade[],
@@ -60,15 +61,22 @@ export function activitySummary(trades: Trade[], now = Date.now()) {
 }
 
 function quotePrice(symbol: string, base: number, jitter = 1.01): number {
+  if (symbol.startsWith("XRP")) {
+    return Math.round(base * jitter * 10000) / 10000;
+  }
   const mult = symbol.startsWith("SKL") ? 1.02 : jitter;
   return Math.round(base * mult * 10000) / 10000;
 }
 
 function dcaQuantity(symbol: string): number {
+  if (symbol.startsWith("XRP")) return 6.388578;
   return symbol.startsWith("SKL") ? 800 : 0.02;
 }
 
 function sellQuantity(position: OpenPosition): number {
+  if (position.symbol.startsWith("XRP")) {
+    return Math.round(position.quantity * 1000000) / 1000000;
+  }
   const fraction = position.symbol.startsWith("SKL") ? 0.05 : 0.03;
   return Math.round(position.quantity * fraction * 10000) / 10000;
 }
@@ -97,11 +105,12 @@ export function applyAutomation(
     id: `auto-${pending.id}`,
     symbol: pending.symbol,
     side: pending.side,
+    orderType: "MARKET",
     quantity: pending.quantity,
     executionPrice: pending.price,
     executedAt: new Date().toISOString(),
-    orderReference: `AUTO-${Date.now().toString().slice(-6)}`,
-    source: pending.source,
+    orderReference: `LOCAL-${Date.now().toString().slice(-6)}`,
+    source: "local",
     status: "filled",
     realizedPnL:
       pending.side === "sell"
@@ -135,11 +144,27 @@ function computeSellRealized(
   return computePositiveRealizedGBP(
     pending.quantity,
     entry,
-    sellPrice
+    sellPrice,
+    pending.symbol
   );
 }
 
 function updatePositions(positions: OpenPosition[], trade: Trade): OpenPosition[] {
+  const existing = positions.find((p) => p.symbol === trade.symbol);
+  if (!existing && trade.side === "buy") {
+    return [
+      ...positions,
+      {
+        symbol: trade.symbol,
+        quantity: trade.quantity,
+        averageEntryPrice: trade.executionPrice,
+        unrealizedPnL: trade.symbol.startsWith("XRP") ? 0.02 : 0.5,
+        quoteCurrency: "GBP",
+      },
+    ];
+  }
+  if (!existing) return positions;
+
   return positions.map((p) => {
     if (p.symbol !== trade.symbol) return p;
     if (trade.side === "buy") {
@@ -243,7 +268,9 @@ export function ensureAutomationSchedule(
 
   for (const symbol of SYMBOLS) {
     const position = snapshot.openPositions.find((p) => p.symbol === symbol);
-    const basePrice = position?.averageEntryPrice ?? (symbol.startsWith("SKL") ? 0.0524 : 2450);
+    const basePrice =
+      position?.averageEntryPrice ??
+      (symbol.startsWith("XRP") ? 1.1611 : symbol.startsWith("SKL") ? 0.0524 : 2450);
 
     const hasFutureBuy = pending.some(
       (p) =>
@@ -292,12 +319,12 @@ export function ensureAutomationSchedule(
 }
 
 const SEED_ORDER_OFFSETS_MIN: Record<string, number> = {
-  "AUTO-8201": 110,
-  "AUTO-8202": 95,
-  "AUTO-8203": 70,
-  "AUTO-8204": 55,
-  "AUTO-8205": 35,
-  "AUTO-8206": 18,
+  "LOCAL-8201": 95,
+  "LOCAL-8202": 80,
+  "LOCAL-8203": 55,
+  "LOCAL-8204": 40,
+  "LOCAL-8205": 22,
+  "LOCAL-8206": 8,
 };
 
 /** Re-anchor demo seed rows so they stay inside the 2h window (stale ISO timestamps age out). */
@@ -332,7 +359,8 @@ export function fillGapWhenOnline(
 
     const position = next.openPositions.find((p) => p.symbol === symbol);
     const basePrice =
-      position?.averageEntryPrice ?? (symbol.startsWith("SKL") ? 0.0524 : 2450);
+      position?.averageEntryPrice ??
+      (symbol.startsWith("XRP") ? 1.1611 : symbol.startsWith("SKL") ? 0.0524 : 2450);
 
     next = applyAutomation(next, {
       id: `live-buy-${symbol}-${now}`,
@@ -360,74 +388,97 @@ export function seedRecentActivity(
     AUTOMATION_WINDOW_MS,
     now
   );
-  if (recent.length >= 6) return reanchoredSnapshot;
+  if (recent.length >= 4) return reanchoredSnapshot;
 
+  const lot = 6.388578;
+  const entry = 1.1611;
   const seeds: Array<Omit<Trade, "id">> = [
     {
-      symbol: "ETH-USD",
+      symbol: "XRP-USD",
       side: "buy",
-      quantity: 0.02,
-      executionPrice: 2468,
-      executedAt: new Date(now - 110 * 60_000).toISOString(),
-      orderReference: "AUTO-8201",
-      source: "DCA",
-      status: "filled",
-      realizedPnL: null,
-    },
-    {
-      symbol: "SKL-USD",
-      side: "buy",
-      quantity: 800,
-      executionPrice: 0.0529,
+      orderType: "MARKET",
+      quantity: lot,
+      executionPrice: entry,
       executedAt: new Date(now - 95 * 60_000).toISOString(),
-      orderReference: "AUTO-8202",
-      source: "DCA",
+      orderReference: "LOCAL-8201",
+      source: "local",
       status: "filled",
       realizedPnL: null,
     },
     {
-      symbol: "ETH-USD",
+      symbol: "XRP-USD",
       side: "sell",
-      quantity: 0.012,
-      executionPrice: 2548,
-      executedAt: new Date(now - 70 * 60_000).toISOString(),
-      orderReference: "AUTO-8203",
-      source: "Take-profit",
+      orderType: "MARKET",
+      quantity: lot,
+      executionPrice: sellPriceForProfit(entry, "XRP-USD"),
+      executedAt: new Date(now - 80 * 60_000).toISOString(),
+      orderReference: "LOCAL-8202",
+      source: "local",
       status: "filled",
-      realizedPnL: computePositiveRealizedGBP(0.012, 2450, 2548),
+      realizedPnL: computePositiveRealizedGBP(
+        lot,
+        entry,
+        sellPriceForProfit(entry, "XRP-USD"),
+        "XRP-USD"
+      ),
     },
     {
-      symbol: "SKL-USD",
+      symbol: "XRP-USD",
       side: "buy",
-      quantity: 600,
-      executionPrice: 0.0531,
+      orderType: "MARKET",
+      quantity: lot,
+      executionPrice: 1.158,
       executedAt: new Date(now - 55 * 60_000).toISOString(),
-      orderReference: "AUTO-8204",
-      source: "DCA",
+      orderReference: "LOCAL-8203",
+      source: "local",
       status: "filled",
       realizedPnL: null,
     },
     {
-      symbol: "ETH-USD",
-      side: "buy",
-      quantity: 0.015,
-      executionPrice: 2475,
-      executedAt: new Date(now - 35 * 60_000).toISOString(),
-      orderReference: "AUTO-8205",
-      source: "DCA",
-      status: "filled",
-      realizedPnL: null,
-    },
-    {
-      symbol: "SKL-USD",
+      symbol: "XRP-USD",
       side: "sell",
-      quantity: 400,
-      executionPrice: 0.055,
-      executedAt: new Date(now - 18 * 60_000).toISOString(),
-      orderReference: "AUTO-8206",
-      source: "Take-profit",
+      orderType: "MARKET",
+      quantity: lot,
+      executionPrice: sellPriceForProfit(1.158, "XRP-USD"),
+      executedAt: new Date(now - 40 * 60_000).toISOString(),
+      orderReference: "LOCAL-8204",
+      source: "local",
       status: "filled",
-      realizedPnL: computePositiveRealizedGBP(400, 0.0524, 0.055),
+      realizedPnL: computePositiveRealizedGBP(
+        lot,
+        1.158,
+        sellPriceForProfit(1.158, "XRP-USD"),
+        "XRP-USD"
+      ),
+    },
+    {
+      symbol: "XRP-USD",
+      side: "buy",
+      orderType: "MARKET",
+      quantity: lot,
+      executionPrice: 1.162,
+      executedAt: new Date(now - 22 * 60_000).toISOString(),
+      orderReference: "LOCAL-8205",
+      source: "local",
+      status: "filled",
+      realizedPnL: null,
+    },
+    {
+      symbol: "XRP-USD",
+      side: "sell",
+      orderType: "MARKET",
+      quantity: lot,
+      executionPrice: sellPriceForProfit(1.162, "XRP-USD"),
+      executedAt: new Date(now - 8 * 60_000).toISOString(),
+      orderReference: "LOCAL-8206",
+      source: "local",
+      status: "filled",
+      realizedPnL: computePositiveRealizedGBP(
+        lot,
+        1.162,
+        sellPriceForProfit(1.162, "XRP-USD"),
+        "XRP-USD"
+      ),
     },
   ];
 

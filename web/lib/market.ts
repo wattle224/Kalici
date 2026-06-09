@@ -7,6 +7,7 @@ export interface MarketTicker {
 }
 
 const EXTRA_GAINERS: MarketTicker[] = [
+  { symbol: "XRP-USD", price: 1.18, change24hPct: 1.6 },
   { symbol: "BTC-USD", price: 68_420, change24hPct: 2.4 },
   { symbol: "SOL-USD", price: 142.5, change24hPct: 5.1 },
   { symbol: "LINK-USD", price: 14.82, change24hPct: 3.8 },
