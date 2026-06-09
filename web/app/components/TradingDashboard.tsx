@@ -83,6 +83,16 @@ export default function TradingDashboard() {
     persist(cleanBootstrap());
   }, [persist]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("cleanRestart") !== "1") return;
+    cleanRestart();
+    params.delete("cleanRestart");
+    const next = params.toString();
+    const path = next ? `?${next}` : window.location.pathname;
+    window.history.replaceState({}, "", path);
+  }, [cleanRestart]);
+
   const toggleExecution = useCallback(() => {
     const goingOnline = snapshot.executionState === "paused";
     let next: TradingSnapshotWithAutomation = {
