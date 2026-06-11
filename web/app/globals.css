@@ -124,6 +124,16 @@ h1 {
   border: 1px solid #2a3544;
 }
 
+.ledger-error-banner {
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  background: rgba(240, 113, 120, 0.12);
+  border: 1px solid var(--red);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
 .execution-banner.paused {
   border-color: var(--orange);
 }

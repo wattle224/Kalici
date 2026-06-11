@@ -6,6 +6,12 @@ import {
   kickstartExecution,
 } from "@/lib/automation";
 import { getExecutionStatus } from "@/lib/executionStatus";
+import {
+  fetchLedger,
+  LEDGER_LOAD_ERROR,
+  postCleanRestart,
+  saveLedgerSnapshot,
+} from "@/lib/ledgerApi";
 import { formatCountdown, msUntil, totalRealizedPnL } from "@/lib/realization";
 import { hydrateSnapshot, loadSnapshot } from "@/lib/hydrate";
 import { ACTIVE_MARKET } from "@/lib/symbols";
@@ -23,6 +29,8 @@ export default function TradingDashboard() {
     loadSnapshot()
   );
   const [now, setNow] = useState(() => Date.now());
+  const [ledgerError, setLedgerError] = useState<string | null>(null);
+  const [apiConnected, setApiConnected] = useState(false);
 
   const history = useMemo(() => settledFills(snapshot.trades), [snapshot.trades]);
   const activity = useMemo(
@@ -30,21 +38,70 @@ export default function TradingDashboard() {
     [snapshot.trades, now]
   );
 
-  const persist = useCallback((next: TradingSnapshotWithAutomation) => {
-    const hydrated = hydrateSnapshot(next);
-    setSnapshot(hydrated);
-    saveSnapshot(hydrated);
+  const applySnapshot = useCallback((next: TradingSnapshotWithAutomation) => {
+    setSnapshot(next);
+    saveSnapshot(next);
   }, []);
 
-  const cleanRestart = useCallback(() => {
+  const loadFromApi = useCallback(async (): Promise<boolean> => {
+    try {
+      const data = await fetchLedger();
+      if (data.snapshot) {
+        applySnapshot(data.snapshot);
+        setLedgerError(null);
+        setApiConnected(true);
+        return true;
+      }
+      throw new Error("No snapshot in response");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to fetch";
+      setLedgerError(`${LEDGER_LOAD_ERROR} ${msg}`);
+      setApiConnected(false);
+      return false;
+    }
+  }, [applySnapshot]);
+
+  const persist = useCallback(
+    async (next: TradingSnapshotWithAutomation) => {
+      const hydrated = hydrateSnapshot(next);
+      applySnapshot(hydrated);
+      try {
+        await saveLedgerSnapshot(hydrated);
+        setLedgerError(null);
+        setApiConnected(true);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Failed to fetch";
+        setLedgerError(`${LEDGER_LOAD_ERROR} ${msg}`);
+        setApiConnected(false);
+      }
+    },
+    [applySnapshot]
+  );
+
+  const cleanRestart = useCallback(async () => {
     clearTradingStorage();
-    persist(cleanBootstrap());
-  }, [persist]);
+    try {
+      const data = await postCleanRestart();
+      if (data.snapshot) {
+        applySnapshot(data.snapshot);
+        setLedgerError(null);
+        setApiConnected(true);
+        return;
+      }
+    } catch {
+      /* fall through to local */
+    }
+    await persist(cleanBootstrap());
+  }, [applySnapshot, persist]);
+
+  useEffect(() => {
+    void loadFromApi();
+  }, [loadFromApi]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("cleanRestart") === "1") {
-      cleanRestart();
+      void cleanRestart();
       params.delete("cleanRestart");
       const next = params.toString();
       const path = next ? `?${next}` : window.location.pathname;
@@ -61,11 +118,16 @@ export default function TradingDashboard() {
     if (goingOnline) {
       next = kickstartExecution({ ...next, pendingAutomations: [] });
     }
-    persist(next);
+    void persist(next);
   }, [persist, snapshot]);
 
   useEffect(() => {
-    const tick = () => {
+    const tick = async () => {
+      setNow(Date.now());
+      if (apiConnected) {
+        await loadFromApi();
+        return;
+      }
       setSnapshot((current) => {
         const hydrated = hydrateSnapshot(current);
         if (JSON.stringify(hydrated) !== JSON.stringify(current)) {
@@ -73,13 +135,12 @@ export default function TradingDashboard() {
         }
         return hydrated;
       });
-      setNow(Date.now());
     };
-    tick();
+    void tick();
     const pollMs = snapshot.executionState === "running" ? 5_000 : 10_000;
-    const id = window.setInterval(tick, pollMs);
+    const id = window.setInterval(() => void tick(), pollMs);
     return () => window.clearInterval(id);
-  }, [snapshot.executionState]);
+  }, [snapshot.executionState, apiConnected, loadFromApi]);
 
   const realizedTotal = useMemo(
     () => totalRealizedPnL(snapshot.trades),
@@ -100,12 +161,21 @@ export default function TradingDashboard() {
 
   return (
     <main>
-      <p className="app-id">Kalici · {ACTIVE_MARKET} · local execution</p>
+      <p className="app-id">
+        Kalici · {ACTIVE_MARKET} · local execution
+        {apiConnected ? " · API :8000" : " · API offline"}
+      </p>
       <h1>Trading</h1>
       <p className="subtitle">
         Live <strong>{ACTIVE_MARKET}</strong> MARKET orders when execution is
         ONLINE. Source: <strong>local</strong>.
       </p>
+
+      {ledgerError && (
+        <div className="ledger-error-banner" role="alert">
+          <strong>Error:</strong> {ledgerError}
+        </div>
+      )}
 
       <div className="toolbar">
         <button type="button" className="primary" onClick={toggleExecution}>
@@ -113,8 +183,11 @@ export default function TradingDashboard() {
             ? "Pause execution"
             : "Resume execution"}
         </button>
-        <button type="button" className="danger" onClick={cleanRestart}>
+        <button type="button" className="danger" onClick={() => void cleanRestart()}>
           Clean restart
+        </button>
+        <button type="button" onClick={() => void loadFromApi()}>
+          Refresh ledger
         </button>
       </div>
 
