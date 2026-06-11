@@ -23,13 +23,15 @@ Sample data is included for local development and demos.
 
 **Error:** `Ledger data could not be loaded from the API … port 8000` means the **ledger API is not running**.
 
-Use the launcher in the repo root (replace your Desktop shortcut target):
+**One-time Desktop setup** (removes old shortcut, installs correct launcher):
 
-```
-C:\path\to\Kalici\Launch-Investment-Management.bat
+```bat
+cd C:\path\to\Kalici
+git pull
+Install-Desktop-Launcher.bat
 ```
 
-Or right-click your Desktop `Launch-Investment-Management.bat` → **Properties** → set **Target** to the copy inside your cloned `Kalici` folder.
+Then use **Investment Management.lnk** or **Launch-Investment-Management.bat** on your Desktop.
 
 The launcher starts:
 
