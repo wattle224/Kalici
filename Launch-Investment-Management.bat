@@ -5,6 +5,15 @@ REM Kalici Investment Management — web UI (3000) includes /api/ledger; port 80
 set "ROOT=%~dp0"
 if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 
+REM Auto-create Desktop shortcut on first run (Windows only)
+if exist "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" (
+  if not exist "%USERPROFILE%\Desktop\Investment Management.lnk" (
+    if not exist "%USERPROFILE%\OneDrive\Desktop\Investment Management.lnk" (
+      call "%ROOT%\Install-Desktop-Launcher.bat" /silent >nul 2>&1
+    )
+  )
+)
+
 echo.
 echo  Kalici Investment Management
 echo  ============================
