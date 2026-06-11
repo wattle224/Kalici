@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableDelayedExpansion
 
-REM Kalici Investment Management — ledger API (8000) MUST start before web UI (3000)
+REM Kalici Investment Management — web UI (3000) includes /api/ledger; port 8000 is optional extra.
 set "ROOT=%~dp0"
 if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 
@@ -21,60 +21,64 @@ if errorlevel 1 (
 
 cd /d "%ROOT%"
 
-if not exist "%ROOT%\node_modules\tsx" (
-  echo Installing ledger API dependencies...
+if not exist "%ROOT%\web\node_modules" (
+  echo Installing web dependencies...
+  cd /d "%ROOT%\web"
   call npm install
-  if errorlevel 1 (
-    echo ERROR: npm install failed in %ROOT%
-    pause
-    exit /b 1
-  )
+  cd /d "%ROOT%"
 )
 
-REM --- Ledger API on port 8000 (required — UI fails without this) ---
+REM --- Optional ledger file API on port 8000 ---
 netstat -ano | findstr ":8000" | findstr "LISTENING" >nul 2>&1
 if errorlevel 1 (
-  echo Starting ledger API on port 8000...
-  start "Kalici Ledger API :8000" cmd /k "cd /d "%ROOT%" && npm run ledger"
-  timeout /t 5 /nobreak >nul
+  if exist "%ROOT%\node_modules\tsx" (
+    echo Starting optional ledger file API on port 8000...
+    start "Kalici Ledger API :8000" cmd /k "cd /d "%ROOT%" && npm run ledger"
+    timeout /t 3 /nobreak >nul
+  ) else (
+    echo Skipping port 8000 ^(run "npm install" in repo root to enable^).
+  )
 ) else (
-  echo Port 8000 already in use — assuming ledger API is running.
+  echo Port 8000 already in use.
 )
 
-REM --- Health check (PowerShell — works without curl) ---
-powershell -NoProfile -Command "try { (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 5).StatusCode } catch { exit 1 }" >nul 2>&1
-if errorlevel 1 (
-  echo.
-  echo ERROR: Ledger API is not responding on http://127.0.0.1:8000/health
-  echo Check the "Kalici Ledger API :8000" window for errors.
-  echo.
-  pause
-  exit /b 1
-)
-echo Ledger API OK: http://127.0.0.1:8000
-
-REM --- Web UI on port 3000 ---
+REM --- Web UI on port 3000 (includes GET /api/ledger — required) ---
 netstat -ano | findstr ":3000" | findstr "LISTENING" >nul 2>&1
 if errorlevel 1 (
   echo Starting web UI on port 3000...
-  if not exist "%ROOT%\web\node_modules" (
-    echo Installing web dependencies...
-    cd /d "%ROOT%\web"
-    call npm install
-    cd /d "%ROOT%"
-  )
   start "Kalici Web UI :3000" cmd /k "cd /d "%ROOT%\web" && npm run dev"
-  timeout /t 6 /nobreak >nul
+  echo Waiting for web UI...
+  timeout /t 8 /nobreak >nul
 ) else (
   echo Port 3000 already in use — assuming web UI is running.
 )
 
+REM --- Health: web ledger on same port as UI (this is what the page loads first) ---
+set "UI_OK=0"
+for /L %%i in (1,1,12) do (
+  powershell -NoProfile -Command "try { (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:3000/api/ledger' -TimeoutSec 4).StatusCode } catch { exit 1 }" >nul 2>&1
+  if not errorlevel 1 (
+    set "UI_OK=1"
+    goto :ui_ready
+  )
+  timeout /t 2 /nobreak >nul
+)
+:ui_ready
+
+if "%UI_OK%"=="0" (
+  echo.
+  echo ERROR: Web UI ledger not responding at http://127.0.0.1:3000/api/ledger
+  echo Check the "Kalici Web UI :3000" window for errors.
+  pause
+  exit /b 1
+)
+
+echo Web ledger OK: http://127.0.0.1:3000/api/ledger
 echo Opening http://127.0.0.1:3000/
 start "" "http://127.0.0.1:3000/"
 
 echo.
-echo Done. Keep BOTH console windows open:
-echo   - Kalici Ledger API :8000
-echo   - Kalici Web UI :3000
+echo Done. Keep the "Kalici Web UI :3000" window open.
+echo Port 8000 is optional; the UI loads ledger from port 3000 first.
 echo.
 pause

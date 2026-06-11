@@ -7,11 +7,7 @@ import {
 import type { TradingSnapshotWithAutomation } from "@/lib/trading";
 
 export async function GET() {
-  const payload = buildLedgerResponse();
-  return NextResponse.json({
-    ...payload,
-    note: "Ledger also at GET /api/ledger. Standalone API: port 8000.",
-  });
+  return NextResponse.json(buildLedgerResponse());
 }
 
 export async function POST(request: Request) {
@@ -30,5 +26,5 @@ export async function POST(request: Request) {
     return NextResponse.json(buildLedgerResponse());
   }
 
-  return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  return NextResponse.json({ ok: false, error: "Unknown action" }, { status: 400 });
 }

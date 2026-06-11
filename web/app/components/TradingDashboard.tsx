@@ -54,9 +54,13 @@ export default function TradingDashboard() {
       }
       throw new Error("No snapshot in response");
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to fetch";
-      setLedgerError(`${LEDGER_LOAD_ERROR} ${msg}`);
+      const local = hydrateSnapshot(loadSnapshot());
+      applySnapshot(local);
       setApiConnected(false);
+      const msg = e instanceof Error ? e.message : "Failed to fetch";
+      setLedgerError(
+        `${LEDGER_LOAD_ERROR} ${msg} — showing local browser ledger instead.`
+      );
       return false;
     }
   }, [applySnapshot]);
@@ -69,10 +73,9 @@ export default function TradingDashboard() {
         await saveLedgerSnapshot(hydrated);
         setLedgerError(null);
         setApiConnected(true);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Failed to fetch";
-        setLedgerError(`${LEDGER_LOAD_ERROR} ${msg}`);
+      } catch {
         setApiConnected(false);
+        setLedgerError(null);
       }
     },
     [applySnapshot]
@@ -163,7 +166,7 @@ export default function TradingDashboard() {
     <main>
       <p className="app-id">
         Kalici · {ACTIVE_MARKET} · local execution
-        {apiConnected ? " · API :8000" : " · API offline"}
+        {apiConnected ? " · ledger API connected" : " · local browser ledger"}
       </p>
       <h1>Trading</h1>
       <p className="subtitle">
