@@ -1,0 +1,14 @@
+{
+  "name": "kalici",
+  "private": true,
+  "scripts": {
+    "ledger": "npx tsx backend/server.ts",
+    "web": "npm run dev --prefix web",
+    "dev": "npx concurrently -k \"npm run ledger\" \"npm run web\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.4.0"
+  }
+}

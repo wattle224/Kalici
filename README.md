@@ -19,15 +19,44 @@ Sample data is included for local development and demos.
 - iOS 17.0 or later
 - macOS for building and running on simulator or device
 
-## Web trading dashboard (port 3000)
+## Investment Management (Windows desktop)
 
-```bash
-cd web
-npm install
-npm run dev
+**Error:** `Ledger data could not be loaded from the API … port 8000` means the **ledger API is not running**.
+
+**Desktop shortcut** — double-click in the repo folder:
+
+```bat
+CREATE-DESKTOP-SHORTCUT.bat
 ```
 
-Open http://127.0.0.1:3000/ — trade history fixes apply to **all** symbols (`ETH-USD`, `SKL-USD`, any `*-USD`), not a single pair. Use **Clean restart** to reset persisted ledger data.
+Or from Command Prompt:
+
+```bat
+cd C:\Users\User\Kalici
+git pull
+CREATE-DESKTOP-SHORTCUT.bat
+```
+
+Creates **Investment Management.lnk** on your Desktop. The launcher also auto-creates it on first run.
+
+The launcher starts:
+
+1. **Ledger API** — http://127.0.0.1:8000 (`GET /api/ledger`, `GET /health`)
+2. **Web UI** — http://127.0.0.1:3000
+
+Keep both console windows open. Verify API: http://127.0.0.1:8000/health
+
+Manual start:
+
+```bash
+npm install          # repo root — installs tsx for ledger
+npm run ledger       # port 8000
+cd web && npm install && npm run dev   # port 3000
+```
+
+## Web trading dashboard (port 3000)
+
+Open http://127.0.0.1:3000/ — **XRP-USD** order history table. Header shows `Kalici · XRP-USD · local execution · API :8000` when the ledger API is connected. Use **Clean restart** or `?cleanRestart=1` to reset ledger data.
 
 **Share feedback** — floating button opens an interactive form. Emails go to `sbarryfr@gmail.com` with subject `[Kalici Trading Feedback] {category} — {preview}`. Copy `web/.env.example` to `web/.env.local` and set Gmail SMTP (app password) for server-side send; otherwise the mail app opens with a pre-filled draft.
 
