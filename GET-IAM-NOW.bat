@@ -34,7 +34,7 @@ set "DOWNLOAD_OK=0"
 for %%B in (main cursor/ledger-api-port-8000-ae22) do (
   if "!DOWNLOAD_OK!"=="0" (
     set "BRANCH=%%B"
-    set "BASE=https://raw.githubusercontent.com/wattle224/Kalici/%%B/iam-standalone"
+    set "BASE=https://github.com/wattle224/Kalici/raw/%%B/iam-standalone"
     call :try_download
   )
 )
