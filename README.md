@@ -49,6 +49,25 @@ ATLAS/
 └── Views/                  # SwiftUI screens and components
 ```
 
+## Utility scripts
+
+`scripts/fix-utf16-byteswap.py` repairs source files wrecked by a UTF-16 byte-order
+mixup — the failure mode where a file becomes a wall of CJK/math characters and the
+interpreter reports `SyntaxError: invalid character '∀' (U+2200)`. It happens when a
+file is written as UTF-16LE (PowerShell's `>`, `Out-File` and `Set-Content` all do
+this by default) and then read back as UTF-16BE, which leaves every original byte
+stored as `byte << 8`. The script is stdlib-only and runs against any project:
+
+```bash
+python3 scripts/fix-utf16-byteswap.py path/to/project           # report what is damaged
+python3 scripts/fix-utf16-byteswap.py path/to/project --apply   # rewrite in place
+```
+
+It defaults to a dry run, only rewrites a file when the repaired text reads as plain
+source (and, for `.py` files, actually parses), and supports `--backup` for `.bak`
+copies. To stop the corruption recurring, force UTF-8 at the point of writing, e.g.
+`Out-File -Encoding utf8` or `Set-Content -Encoding utf8`.
+
 ## Notes
 
 This repository previously referenced `InvestmentOps.xcodeproj`. The app has been consolidated under the **ATLAS** name and project.
