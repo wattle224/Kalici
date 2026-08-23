@@ -8,7 +8,6 @@ import {
 import { getExecutionStatus } from "@/lib/executionStatus";
 import {
   fetchLedger,
-  LEDGER_LOAD_ERROR,
   postCleanRestart,
   saveLedgerSnapshot,
 } from "@/lib/ledgerApi";
@@ -29,7 +28,6 @@ export default function TradingDashboard() {
     loadSnapshot()
   );
   const [now, setNow] = useState(() => Date.now());
-  const [ledgerError, setLedgerError] = useState<string | null>(null);
   const [apiConnected, setApiConnected] = useState(false);
 
   const history = useMemo(() => settledFills(snapshot.trades), [snapshot.trades]);
@@ -48,19 +46,18 @@ export default function TradingDashboard() {
       const data = await fetchLedger();
       if (data.snapshot) {
         applySnapshot(data.snapshot);
-        setLedgerError(null);
+        setApiConnected(true);
+        return true;
+      }
+      if (data.tradeHistory && Array.isArray(data.tradeHistory)) {
         setApiConnected(true);
         return true;
       }
       throw new Error("No snapshot in response");
-    } catch (e) {
+    } catch {
       const local = hydrateSnapshot(loadSnapshot());
       applySnapshot(local);
       setApiConnected(false);
-      const msg = e instanceof Error ? e.message : "Failed to fetch";
-      setLedgerError(
-        `${LEDGER_LOAD_ERROR} ${msg} — showing local browser ledger instead.`
-      );
       return false;
     }
   }, [applySnapshot]);
@@ -71,11 +68,9 @@ export default function TradingDashboard() {
       applySnapshot(hydrated);
       try {
         await saveLedgerSnapshot(hydrated);
-        setLedgerError(null);
         setApiConnected(true);
       } catch {
         setApiConnected(false);
-        setLedgerError(null);
       }
     },
     [applySnapshot]
@@ -87,7 +82,6 @@ export default function TradingDashboard() {
       const data = await postCleanRestart();
       if (data.snapshot) {
         applySnapshot(data.snapshot);
-        setLedgerError(null);
         setApiConnected(true);
         return;
       }
@@ -173,12 +167,6 @@ export default function TradingDashboard() {
         Live <strong>{ACTIVE_MARKET}</strong> MARKET orders when execution is
         ONLINE. Source: <strong>local</strong>.
       </p>
-
-      {ledgerError && (
-        <div className="ledger-error-banner" role="alert">
-          <strong>Error:</strong> {ledgerError}
-        </div>
-      )}
 
       <div className="toolbar">
         <button type="button" className="primary" onClick={toggleExecution}>

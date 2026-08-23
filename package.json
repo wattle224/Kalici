@@ -2,7 +2,7 @@
   "name": "kalici",
   "private": true,
   "scripts": {
-    "ledger": "npx tsx backend/server.ts",
+    "ledger": "node backend/server.mjs",
     "web": "npm run dev --prefix web",
     "dev": "npx concurrently -k \"npm run ledger\" \"npm run web\""
   },
