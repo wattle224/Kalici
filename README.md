@@ -23,21 +23,29 @@ Sample data is included for local development and demos.
 
 **Error:** `Ledger data could not be loaded from the API … port 8000` means the **ledger API is not running**.
 
-**Desktop shortcut** — double-click in the repo folder:
+**You do not need `C:\Users\User\Kalici`** — that was only an example. Use wherever Kalici is on your PC, or install it to your Desktop:
+
+### First-time setup (easiest)
+
+1. Download or clone the repo to **`Desktop\Kalici`**:
+   ```bat
+   git clone https://github.com/wattle224/Kalici.git %USERPROFILE%\Desktop\Kalici
+   ```
+2. Open **`Desktop\Kalici`** in File Explorer.
+3. Double-click **`SETUP-AND-LAUNCH.bat`** — creates the Desktop shortcut and starts IAM.
+
+Or double-click **`Install-Kalici-To-Desktop.bat`** from the repo (clones to Desktop if missing).
+
+### Already have the folder?
+
+Open the Kalici folder in File Explorer (wherever it is), then double-click:
 
 ```bat
 CREATE-DESKTOP-SHORTCUT.bat
+Launch-Investment-Management.bat
 ```
 
-Or from Command Prompt:
-
-```bat
-cd C:\Users\User\Kalici
-git pull
-CREATE-DESKTOP-SHORTCUT.bat
-```
-
-Creates **Investment Management.lnk** on your Desktop. The launcher also auto-creates it on first run.
+To find an existing install, search File Explorer for **`Launch-Investment-Management.bat`**.
 
 The launcher starts:
 
