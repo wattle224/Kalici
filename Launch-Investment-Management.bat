@@ -20,17 +20,21 @@ if errorlevel 1 (
 
 cd /d "%ROOT%"
 
+if not exist "%ROOT%\backend\server.mjs" (
+  echo ERROR: backend\server.mjs not found. Wrong folder?
+  pause
+  exit /b 1
+)
+
 REM --- Port 8000: ledger API (REQUIRED) ---
-netstat -ano | findstr ":8000" | findstr "LISTENING" >nul 2>&1
+powershell -NoProfile -Command "try { (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 2).StatusCode } catch { exit 1 }" >nul 2>&1
 if errorlevel 1 (
   echo Starting ledger API on port 8000...
-  start "Kalici Ledger API :8000" cmd /k "cd /d "%ROOT%" && node backend/server.mjs"
-) else (
-  echo Port 8000 already in use.
+  start "Kalici Ledger API - KEEP OPEN" /D "%ROOT%" cmd /k node backend\server.mjs
 )
 
 set "API_OK=0"
-for /L %%i in (1,1,20) do (
+for /L %%i in (1,1,30) do (
   powershell -NoProfile -Command "try { (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 3).StatusCode } catch { exit 1 }" >nul 2>&1
   if not errorlevel 1 (
     set "API_OK=1"
@@ -43,8 +47,7 @@ for /L %%i in (1,1,20) do (
 if "%API_OK%"=="0" (
   echo.
   echo ERROR: Ledger API failed on port 8000.
-  echo Open the "Kalici Ledger API :8000" window and check for errors.
-  echo Try manually: node backend/server.mjs
+  echo Run START-IAM.bat or TROUBLESHOOT-IAM.bat
   pause
   exit /b 1
 )
@@ -61,16 +64,17 @@ if not exist "%ROOT%\web\node_modules" (
 netstat -ano | findstr ":3000" | findstr "LISTENING" >nul 2>&1
 if errorlevel 1 (
   echo Starting web UI on port 3000...
-  start "Kalici Web UI :3000" cmd /k "cd /d "%ROOT%\web" && npm run dev"
-  timeout /t 6 /nobreak >nul
+  start "Kalici Web UI :3000" /D "%ROOT%\web" cmd /k npm run dev
+  timeout /t 8 /nobreak >nul
 )
 
 echo.
-echo IAM is ready. Ledger: http://127.0.0.1:8000/api/ledger
-echo Opening dashboard: http://127.0.0.1:3000/
-start "" "http://127.0.0.1:3000/"
+echo IAM is ready.
+echo   Ledger: http://127.0.0.1:8000/health
+echo   Dashboard: http://127.0.0.1:3000/
+start "" "http://127.0.0.1:8000/health"
 
 echo.
-echo KEEP OPEN: "Kalici Ledger API :8000" window
+echo KEEP OPEN: "Kalici Ledger API - KEEP OPEN" window
 echo.
 pause

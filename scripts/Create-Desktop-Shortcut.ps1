@@ -47,9 +47,9 @@ $shell = New-Object -ComObject WScript.Shell
 
 $lnkPath = Join-Path $Desktop "Investment Management.lnk"
 $lnk = $shell.CreateShortcut($lnkPath)
-$lnk.TargetPath = $Launcher
+$lnk.TargetPath = Join-Path $RepoPath "START-IAM.bat"
 $lnk.WorkingDirectory = $RepoPath
-$lnk.Description = "Kalici Investment Management (XRP trading UI)"
+$lnk.Description = "Start Investment Management ledger (port 8000)"
 $lnk.IconLocation = "$env:SystemRoot\System32\imageres.dll,109"
 $lnk.Save()
 Write-Host "Created: Investment Management.lnk"
