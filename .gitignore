@@ -19,3 +19,6 @@ xcuserdata/
 # Web
 web/node_modules/
 web/.next/
+
+# Root (ledger API tooling)
+node_modules/

@@ -1,14 +1,18 @@
 export type { TradingSnapshotWithAutomation } from "./automation";
 export type { TradingSnapshotWithSchedule } from "./realization";
 
+import { isGbpQuoted } from "./symbols";
+
 export type TradeSide = "buy" | "sell";
 export type TradeStatus = "filled" | "skipped" | "pending";
+export type OrderType = "MARKET" | "LIMIT";
 export type ExecutionState = "running" | "paused";
 
 export interface Trade {
   id: string;
   symbol: string;
   side: TradeSide;
+  orderType: OrderType;
   quantity: number;
   executionPrice: number;
   executedAt: string;
@@ -33,8 +37,22 @@ export interface TradingSnapshot {
   openPositions: OpenPosition[];
 }
 
-export const SCHEMA_VERSION = 5;
-export const STORAGE_KEY = "kalici.trading.snapshot";
+export const SCHEMA_VERSION = 8;
+export const STORAGE_KEY = "kalici.trading.v8";
+
+/** Older ledger keys — wiped on clean restart. */
+export const LEGACY_STORAGE_KEYS = [
+  "kalici.trading.snapshot",
+  "kalici.trading.v7",
+  STORAGE_KEY,
+] as const;
+
+export function clearTradingStorage(): void {
+  if (typeof window === "undefined") return;
+  for (const key of LEGACY_STORAGE_KEYS) {
+    localStorage.removeItem(key);
+  }
+}
 
 /** Applies to every pair: ETH-USD, SKL-USD, BTC-USD, etc. */
 export function isSettledFill(trade: Trade): boolean {
@@ -69,6 +87,15 @@ export function skippedWhilePaused(trades: Trade[]): Trade[] {
 
 export function tradesForSymbol(trades: Trade[], symbol: string): Trade[] {
   return settledFills(trades).filter((t) => t.symbol === symbol);
+}
+
+export function isLegacySnapshot(snapshot: TradingSnapshot): boolean {
+  if (snapshot.schemaVersion < SCHEMA_VERSION) return true;
+  const hasXrp = snapshot.trades.some((t) => t.symbol === "XRP-USD");
+  const missingOrderType = snapshot.trades.some(
+    (t) => isSettledFill(t) && !("orderType" in t && t.orderType)
+  );
+  return !hasXrp || missingOrderType;
 }
 
 export function containsCorruptHistory(snapshot: TradingSnapshot): boolean {
@@ -108,90 +135,47 @@ export function sanitize(snapshot: TradingSnapshot): TradingSnapshot {
   return { ...snapshot, trades, schemaVersion: SCHEMA_VERSION };
 }
 
+const XRP_LOT = 6.388578;
+
 export function cleanBootstrap(): TradingSnapshot {
   const now = Date.now();
-  const hoursAgo = (h: number) => new Date(now - h * 3600_000).toISOString();
+  const buyAt = new Date(now - 3 * 3600_000).toISOString();
+  const sellAt = new Date(now - 2.5 * 3600_000).toISOString();
+  const buyPrice = 1.1611;
+  const sellPrice = 1.1454;
+  const realized =
+    Math.round((sellPrice - buyPrice) * XRP_LOT * 10000) / 10000;
 
   return {
     schemaVersion: SCHEMA_VERSION,
     executionState: "running",
-    openPositions: [
-      {
-        symbol: "ETH-USD",
-        quantity: 0.42,
-        averageEntryPrice: 2450,
-        unrealizedPnL: 71.4,
-        quoteCurrency: "GBP",
-      },
-      {
-        symbol: "SKL-USD",
-        quantity: 12_500,
-        averageEntryPrice: 0.0524,
-        unrealizedPnL: 18.25,
-        quoteCurrency: "GBP",
-      },
-    ],
+    openPositions: [],
     trades: [
       {
-        id: "eth-fill-1",
-        symbol: "ETH-USD",
+        id: "xrp-buy-1",
+        symbol: "XRP-USD",
         side: "buy",
-        quantity: 0.42,
-        executionPrice: 2450,
-        executedAt: new Date(now - 3 * 86400_000).toISOString(),
-        orderReference: "AUTO-9001",
-        source: "DCA",
+        orderType: "MARKET",
+        quantity: XRP_LOT,
+        executionPrice: buyPrice,
+        executedAt: buyAt,
+        orderReference: "LOCAL-134807",
+        source: "local",
         status: "filled",
         realizedPnL: null,
       },
       {
-        id: "skl-fill-1",
-        symbol: "SKL-USD",
-        side: "buy",
-        quantity: 12_500,
-        executionPrice: 0.0524,
-        executedAt: new Date(now - 2 * 86400_000).toISOString(),
-        orderReference: "AUTO-9002",
-        source: "DCA",
+        id: "xrp-sell-1",
+        symbol: "XRP-USD",
+        side: "sell",
+        orderType: "MARKET",
+        quantity: XRP_LOT,
+        executionPrice: sellPrice,
+        executedAt: sellAt,
+        orderReference: "LOCAL-141913",
+        source: "local",
         status: "filled",
-        realizedPnL: null,
-      },
-      // Legacy bug rows (zero price while paused) — must not appear in history.
-      {
-        id: "eth-skip-1",
-        symbol: "ETH-USD",
-        side: "buy",
-        quantity: 0.05,
-        executionPrice: 0,
-        executedAt: hoursAgo(3),
-        orderReference: "AUTO-9010",
-        source: "Rebalance (paused)",
-        status: "skipped",
-        realizedPnL: null,
-      },
-      {
-        id: "skl-skip-1",
-        symbol: "SKL-USD",
-        side: "buy",
-        quantity: 2000,
-        executionPrice: 0,
-        executedAt: hoursAgo(2),
-        orderReference: "AUTO-9011",
-        source: "Rebalance (paused)",
-        status: "skipped",
-        realizedPnL: null,
-      },
-      {
-        id: "skl-skip-2",
-        symbol: "SKL-USD",
-        side: "buy",
-        quantity: 3500,
-        executionPrice: 0,
-        executedAt: hoursAgo(1),
-        orderReference: "AUTO-9012",
-        source: "Rebalance (paused)",
-        status: "skipped",
-        realizedPnL: null,
+        realizedPnL: realized,
       },
     ],
   };
@@ -203,6 +187,9 @@ export function saveSnapshot(snapshot: TradingSnapshot): void {
 }
 
 export function formatPrice(value: number, symbol: string): string {
+  if (isGbpQuoted(symbol)) {
+    return formatPriceGBP(value);
+  }
   const decimals = symbol.startsWith("SKL") || value < 10 ? 4 : 2;
   return new Intl.NumberFormat("en-GB", {
     style: "currency",
@@ -210,6 +197,16 @@ export function formatPrice(value: number, symbol: string): string {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   }).format(value);
+}
+
+export function formatPriceGBP(value: number, decimals = 4): string {
+  return `£${value.toFixed(decimals)}`;
+}
+
+export function formatTradeStatus(status: TradeStatus): string {
+  if (status === "filled") return "FILLED";
+  if (status === "skipped") return "SKIPPED";
+  return "PENDING";
 }
 
 export function formatPnL(value: number): string {

@@ -70,6 +70,7 @@ export function applySellRealization(
     id: `realized-${pending.id}`,
     symbol: pending.symbol,
     side: "sell",
+    orderType: "MARKET",
     quantity: pending.quantity,
     executionPrice: pending.sellPrice,
     executedAt: new Date().toISOString(),

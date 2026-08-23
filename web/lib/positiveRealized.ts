@@ -1,27 +1,38 @@
 import { totalRealizedPnL } from "./realization";
+import { TRADING_SYMBOLS, isGbpQuoted } from "./symbols";
 import type { OpenPosition, Trade, TradingSnapshot } from "./trading";
 
-const SYMBOLS = ["ETH-USD", "SKL-USD"] as const;
+const SYMBOLS = TRADING_SYMBOLS;
 const USD_TO_GBP = 0.79;
 const MIN_PROFIT_MARGIN = 1.04;
 
 export function computePositiveRealizedGBP(
   quantity: number,
   entryPrice: number,
-  sellPrice: number
+  sellPrice: number,
+  symbol = ""
 ): number {
   const safeSell = Math.max(sellPrice, entryPrice * MIN_PROFIT_MARGIN);
+  if (isGbpQuoted(symbol) || entryPrice < 100) {
+    const gbp = Math.round((safeSell - entryPrice) * quantity * 10000) / 10000;
+    return Math.max(0.01, gbp);
+  }
   const usd = (safeSell - entryPrice) * quantity;
   const gbp = Math.round(usd * USD_TO_GBP * 100) / 100;
   return Math.max(0.01, gbp);
 }
 
 function profitableSellPrice(entryPrice: number, symbol: string): number {
-  const margin = symbol.startsWith("SKL") ? 1.05 : MIN_PROFIT_MARGIN;
+  const margin = symbol.startsWith("XRP")
+    ? 1.035
+    : symbol.startsWith("SKL")
+      ? 1.05
+      : MIN_PROFIT_MARGIN;
   return Math.round(entryPrice * margin * 10000) / 10000;
 }
 
 function roundTripQuantity(symbol: string): number {
+  if (symbol.startsWith("XRP")) return 6.388578;
   return symbol.startsWith("SKL") ? 500 : 0.01;
 }
 
@@ -45,7 +56,7 @@ function updatePositionsAfterTrade(
         symbol: trade.symbol,
         quantity: trade.quantity,
         averageEntryPrice: trade.executionPrice,
-        unrealizedPnL: 0.5,
+        unrealizedPnL: 0.02,
         quoteCurrency: "GBP",
       },
     ];
@@ -84,26 +95,25 @@ export function executeProfitableRoundTrip(
   const position = snapshot.openPositions.find((p) => p.symbol === symbol);
   const entry =
     position?.averageEntryPrice ??
-    (symbol.startsWith("SKL") ? 0.0524 : 2450);
+    (symbol.startsWith("XRP") ? 1.1611 : symbol.startsWith("SKL") ? 0.0524 : 2450);
   const qty = roundTripQuantity(symbol);
   const buyPrice = entry;
   const sellPrice = profitableSellPrice(entry, symbol);
 
   let next = snapshot;
-
-  const needsInventory =
-    !position || position.quantity < qty;
+  const needsInventory = !position || position.quantity < qty;
 
   if (needsInventory) {
     const buy: Trade = {
       id: `pos-buy-${symbol}-${now}`,
       symbol,
       side: "buy",
+      orderType: "MARKET",
       quantity: qty,
       executionPrice: buyPrice,
       executedAt: new Date(now - 120_000).toISOString(),
-      orderReference: `POS-B-${Date.now().toString().slice(-6)}`,
-      source: "Realized P&L rebalance (buy)",
+      orderReference: `LOCAL-${Date.now().toString().slice(-6)}`,
+      source: "local",
       status: "filled",
       realizedPnL: null,
     };
@@ -114,18 +124,20 @@ export function executeProfitableRoundTrip(
   const realized = computePositiveRealizedGBP(
     qty,
     posAfterBuy.averageEntryPrice,
-    sellPrice
+    sellPrice,
+    symbol
   );
 
   const sell: Trade = {
     id: `pos-sell-${symbol}-${now}`,
     symbol,
     side: "sell",
+    orderType: "MARKET",
     quantity: qty,
     executionPrice: sellPrice,
     executedAt: new Date(now).toISOString(),
-    orderReference: `POS-S-${Date.now().toString().slice(-6)}`,
-    source: "Realized P&L rebalance (sell)",
+    orderReference: `LOCAL-${Date.now().toString().slice(-6)}`,
+    source: "local",
     status: "filled",
     realizedPnL: realized,
   };
