@@ -30,24 +30,37 @@ if errorlevel 1 (
 
 for /f "delims=" %%v in ('node -v') do echo [OK] Node.js %%v
 
-if not exist "%ROOT%\backend\server.mjs" (
+set "SERVER_SCRIPT="
+set "SERVER_DIR="
+if exist "%ROOT%\iam-standalone\server.js" (
+  set "SERVER_SCRIPT=server.js"
+  set "SERVER_DIR=%ROOT%\iam-standalone"
+) else if exist "%ROOT%\backend\server.mjs" (
+  set "SERVER_SCRIPT=server.mjs"
+  set "SERVER_DIR=%ROOT%\backend"
+) else if exist "%ROOT%\server.js" (
+  set "SERVER_SCRIPT=server.js"
+  set "SERVER_DIR=%ROOT%"
+)
+
+if not defined SERVER_SCRIPT (
   color 0C
-  echo [FAIL] backend\server.mjs not found.
+  echo [FAIL] No ledger server found.
   echo You are not in the Kalici folder.
-  echo Run SETUP-AND-LAUNCH.bat or clone from GitHub first.
+  echo Run GET-IAM-NOW.bat or SETUP-AND-LAUNCH.bat first.
   echo.
   pause
   exit /b 1
 )
 
-echo [OK] Found backend\server.mjs
+echo [OK] Found %SERVER_DIR%\%SERVER_SCRIPT%
 echo.
 
 REM Kill stale attempt if port in use but not responding
 powershell -NoProfile -Command "try { (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 2).StatusCode } catch { exit 1 }" >nul 2>&1
 if errorlevel 1 (
   echo Starting ledger API on port 8000...
-  start "Kalici Ledger API - KEEP OPEN" /D "%ROOT%" cmd /k node backend\server.mjs
+  start "Kalici Ledger API - KEEP OPEN" /D "%SERVER_DIR%" cmd /k node "%SERVER_SCRIPT%"
 ) else (
   echo [OK] Ledger API already running on port 8000
 )
