@@ -17,13 +17,21 @@ echo.
 
 where node >nul 2>&1
 if errorlevel 1 (
+  if exist "%ProgramFiles%\nodejs\node.exe" set "PATH=%ProgramFiles%\nodejs;%PATH%"
+)
+
+where node >nul 2>&1
+if errorlevel 1 (
   color 0C
   echo [FAIL] Node.js is NOT installed.
   echo.
-  echo 1. Go to https://nodejs.org/
-  echo 2. Download LTS and install
-  echo 3. Restart PC, then run this file again
+  echo Run GET-IAM-NOW.bat — it downloads Node.js LTS from nodejs.org automatically.
   echo.
+  if exist "%USERPROFILE%\Desktop\GET-IAM-NOW.bat" (
+    start "" "%USERPROFILE%\Desktop\GET-IAM-NOW.bat"
+  ) else (
+    start https://github.com/wattle224/Kalici/raw/main/GET-IAM-NOW.bat
+  )
   pause
   exit /b 1
 )

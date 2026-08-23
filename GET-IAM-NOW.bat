@@ -11,13 +11,37 @@ echo.
 
 where node >nul 2>&1
 if errorlevel 1 (
-  color 0C
-  echo  STEP 1 REQUIRED: Install Node.js
-  echo  https://nodejs.org/  - download LTS, install, restart PC
+  if exist "%ProgramFiles%\nodejs\node.exe" set "PATH=%ProgramFiles%\nodejs;%PATH%"
+)
+
+where node >nul 2>&1
+if errorlevel 1 (
+  color 0E
+  echo  Node.js not found — downloading LTS from https://nodejs.org/
+  echo  Accept the UAC prompt if Windows asks.
   echo.
-  start https://nodejs.org/
-  pause
-  exit /b 1
+  set "NODE_PS=%TEMP%\kalici-Install-NodeJS.ps1"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/main/scripts/Install-NodeJS.ps1' -OutFile '%NODE_PS%'"
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%NODE_PS%"
+  set "NODE_ERR=!ERRORLEVEL!"
+  if exist "%ProgramFiles%\nodejs\node.exe" set "PATH=%ProgramFiles%\nodejs;%PATH%"
+  if "!NODE_ERR!"=="2" (
+    echo.
+    echo  Node.js installed. Restart your PC, then run this file again.
+    pause
+    exit /b 2
+  )
+  where node >nul 2>&1
+  if errorlevel 1 (
+    color 0C
+    echo.
+    echo  Automatic Node.js install failed.
+    echo  Opening https://nodejs.org/ — download LTS, install, restart PC.
+    start https://nodejs.org/
+    pause
+    exit /b 1
+  )
 )
 
 for /f "delims=" %%v in ('node -v') do echo  Node.js %%v OK
@@ -37,6 +61,12 @@ for %%B in (main cursor/ledger-api-port-8000-ae22) do (
     set "BASE=https://github.com/wattle224/Kalici/raw/%%B/iam-standalone"
     call :try_download
   )
+)
+
+REM Also fetch Node.js installer helper for RUN-IAM.bat on Desktop
+if "!DOWNLOAD_OK!"=="1" (
+  powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/main/scripts/Install-NodeJS.ps1' -OutFile '%DEST%\Install-NodeJS.ps1'" >nul 2>&1
 )
 
 if "%DOWNLOAD_OK%"=="0" (

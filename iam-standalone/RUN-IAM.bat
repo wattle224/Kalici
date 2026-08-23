@@ -2,15 +2,28 @@
 title IAM Ledger - KEEP THIS WINDOW OPEN
 cd /d "%~dp0"
 
+if exist "%ProgramFiles%\nodejs\node.exe" set "PATH=%ProgramFiles%\nodejs;%PATH%"
+
 where node >nul 2>&1
 if errorlevel 1 (
   echo.
-  echo  NODE.JS IS NOT INSTALLED
-  echo  Download from: https://nodejs.org/  ^(click LTS^)
-  echo  Install, restart PC, run this file again.
+  echo  Node.js not found — installing LTS from https://nodejs.org/ ...
   echo.
-  pause
-  exit /b 1
+  if exist "%~dp0Install-NodeJS.ps1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0Install-NodeJS.ps1"
+  ) else (
+    set "NODE_PS=%TEMP%\kalici-Install-NodeJS.ps1"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/main/scripts/Install-NodeJS.ps1' -OutFile '%NODE_PS%'"
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%NODE_PS%"
+  )
+  if exist "%ProgramFiles%\nodejs\node.exe" set "PATH=%ProgramFiles%\nodejs;%PATH%"
+  where node >nul 2>&1
+  if errorlevel 1 (
+    echo.
+    echo  Run GET-IAM-NOW.bat on your Desktop, or install from https://nodejs.org/
+    pause
+    exit /b 1
+  )
 )
 
 if not exist "%~dp0server.js" (
