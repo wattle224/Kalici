@@ -61,17 +61,23 @@ if not exist "%ROOT%\web\node_modules" (
   cd /d "%ROOT%"
 )
 
-netstat -ano | findstr ":3000" | findstr "LISTENING" >nul 2>&1
-if errorlevel 1 (
-  echo Starting web UI on port 3000...
-  start "Kalici Web UI :3000" /D "%ROOT%\web" cmd /k npm run dev
-  timeout /t 8 /nobreak >nul
+REM Always restart web UI so localhost:3000 is not a stale process
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":3000" ^| findstr "LISTENING"') do (
+  echo Stopping stale web UI PID %%P...
+  taskkill /F /PID %%P >nul 2>&1
 )
+timeout /t 1 /nobreak >nul
+if exist "%ROOT%\web\.next" rmdir /s /q "%ROOT%\web\.next" 2>nul
+echo Starting fresh web UI on port 3000...
+start "Kalici Web UI :3000" /D "%ROOT%\web" cmd /k npm run dev
+timeout /t 8 /nobreak >nul
 
 echo.
 echo IAM is ready.
 echo   Ledger: http://127.0.0.1:8000/health
-echo   Dashboard: http://127.0.0.1:3000/
+echo   Coinbase: http://127.0.0.1:8000/api/coinbase
+echo   Dashboard: http://127.0.0.1:3000/   ^(Ctrl+F5 to hard-refresh^)
+start "" "http://127.0.0.1:3000/"
 start "" "http://127.0.0.1:8000/health"
 
 echo.

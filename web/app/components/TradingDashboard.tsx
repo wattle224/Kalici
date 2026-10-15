@@ -16,6 +16,7 @@ import { formatCountdown, msUntil, totalRealizedPnL } from "@/lib/realization";
 import { hydrateSnapshot, loadSnapshot } from "@/lib/hydrate";
 import { ACTIVE_MARKET } from "@/lib/symbols";
 import OrderHistoryTable from "./OrderHistoryTable";
+import TickerBanner from "./TickerBanner";
 import {
   cleanBootstrap,
   clearTradingStorage,
@@ -34,6 +35,8 @@ export default function TradingDashboard() {
     null
   );
   const [coinbaseBusy, setCoinbaseBusy] = useState(false);
+  const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null);
+  const buildId = "iam-live-2026-10-15";
 
   const history = useMemo(() => settledFills(snapshot.trades), [snapshot.trades]);
   const activity = useMemo(
@@ -99,12 +102,24 @@ export default function TradingDashboard() {
   const testCoinbase = useCallback(async () => {
     setCoinbaseBusy(true);
     try {
-      const res = await fetch(
+      const urls = [
         `/api/coinbase?products=${encodeURIComponent(ACTIVE_MARKET)},ETH-USD,BTC-USD`,
-        { cache: "no-store" }
-      );
-      const data = (await res.json()) as CoinbaseConnectionStatus;
+        `http://127.0.0.1:8000/api/coinbase?products=${encodeURIComponent(ACTIVE_MARKET)},ETH-USD,BTC-USD`,
+      ];
+      let data: CoinbaseConnectionStatus | null = null;
+      for (const url of urls) {
+        try {
+          const res = await fetch(url, { cache: "no-store" });
+          if (!res.ok) continue;
+          data = (await res.json()) as CoinbaseConnectionStatus;
+          break;
+        } catch {
+          /* try next */
+        }
+      }
+      if (!data) throw new Error("No Coinbase endpoint responded");
       setCoinbase(data);
+      setLastRefreshAt(Date.now());
     } catch (err) {
       setCoinbase({
         ok: false,
@@ -125,6 +140,11 @@ export default function TradingDashboard() {
     void loadFromApi();
     void testCoinbase();
   }, [loadFromApi, testCoinbase]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => void testCoinbase(), 8_000);
+    return () => window.clearInterval(id);
+  }, [testCoinbase]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -187,16 +207,31 @@ export default function TradingDashboard() {
     [snapshot.executionState, snapshot.trades, pending, now]
   );
 
+  const liveXrp = coinbase?.products?.find((p) => p.symbol === ACTIVE_MARKET);
+
   return (
     <main>
       <p className="app-id">
-        Kalici · {ACTIVE_MARKET} · local execution
+        Kalici · {ACTIVE_MARKET} · {buildId}
         {apiConnected ? " · ledger API connected" : " · local browser ledger"}
+        {coinbase?.connected ? " · Coinbase LIVE" : " · Coinbase offline"}
       </p>
       <h1>Trading</h1>
       <p className="subtitle">
-        Live <strong>{ACTIVE_MARKET}</strong> MARKET orders when execution is
-        ONLINE. Source: <strong>local</strong>.
+        Live <strong>{ACTIVE_MARKET}</strong>
+        {liveXrp ? (
+          <>
+            {" "}
+            spot <strong className="mono">${liveXrp.price.toFixed(4)}</strong>
+          </>
+        ) : null}
+        . Prices refresh every 8s. Last update:{" "}
+        <strong>
+          {lastRefreshAt
+            ? new Date(lastRefreshAt).toLocaleTimeString()
+            : "—"}
+        </strong>
+        .
       </p>
 
       <div className="toolbar">
@@ -208,8 +243,14 @@ export default function TradingDashboard() {
         <button type="button" className="danger" onClick={() => void cleanRestart()}>
           Clean restart
         </button>
-        <button type="button" onClick={() => void loadFromApi()}>
-          Refresh ledger
+        <button
+          type="button"
+          onClick={() => {
+            void loadFromApi();
+            void testCoinbase();
+          }}
+        >
+          Refresh all
         </button>
         <button
           type="button"
@@ -334,6 +375,11 @@ export default function TradingDashboard() {
           ))}
         </section>
       )}
+
+      <TickerBanner
+        positions={snapshot.openPositions}
+        coinbaseProducts={coinbase?.products ?? []}
+      />
     </main>
   );
 }
