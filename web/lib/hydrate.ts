@@ -41,7 +41,8 @@ export function hydrateSnapshot(
 
 export function loadSnapshot(): TradingSnapshotWithAutomation {
   if (typeof window === "undefined") {
-    return hydrateSnapshot(cleanBootstrap());
+    // No Date.now() on the server — keeps SSR HTML identical to first client paint.
+    return emptySnapshot() as TradingSnapshotWithAutomation;
   }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
