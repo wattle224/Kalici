@@ -13,12 +13,26 @@ Keep the two black windows open while you use the app.
 
 ---
 
-## First-time setup (Windows)
+## Full install (Windows) — do this once
 
-1. Download / clone this repo, **or** double-click **`MERGE-INTO-ONE.bat`** to install to `Desktop\Investment Management`.
-2. Double-click **`Investment-Management.bat`** (or the Desktop shortcut).
-3. Accept Node.js install if asked.
-4. Browser opens http://127.0.0.1:3000/ — hard refresh with **Ctrl+F5** if needed.
+**PowerShell (copy/paste all of it):**
+
+```powershell
+$bat = Join-Path $env:TEMP 'INSTALL-Investment-Management.bat'
+Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/cursor/iam-full-audit-ae22/INSTALL.bat' -OutFile $bat
+cmd /c $bat
+```
+
+Or download **`INSTALL.bat`** and double-click it.
+
+That will:
+
+1. Delete **all** old Desktop / OneDrive Desktop IAM shortcuts  
+2. Install to **`Desktop\Investment Management`**  
+3. Create **one** new shortcut: **Investment Management**  
+4. Start ledger + web UI and open http://127.0.0.1:3000/  
+
+Accept Node.js install if asked. Keep the black windows open. Use **Ctrl+F5** if the page looks cached.
 
 That single launcher:
 

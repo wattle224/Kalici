@@ -69,21 +69,25 @@ if not defined LEDGER_JS (
 )
 echo  [OK] Ledger: %LEDGER_DIR%\%LEDGER_JS%
 
-REM --- One Desktop shortcut ---
+REM --- Wipe old shortcuts on Desktop + OneDrive Desktop, then create ONE ---
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$desk=[Environment]::GetFolderPath('Desktop');" ^
+  "$ErrorActionPreference='SilentlyContinue';" ^
+  "$desks=@([Environment]::GetFolderPath('Desktop'));" ^
+  "$one=Join-Path $env:USERPROFILE 'OneDrive\Desktop'; if (Test-Path $one) { $desks += $one };" ^
+  "$kill=@('Launch-Investment-Management.bat','Launch-Investment-Management.lnk','Kalici Investment Management.lnk','Kalici.lnk','Investment Management.bat','Investment Management.lnk','GET-IAM-NOW.bat','START-IAM.bat','START-IAM.lnk','RUN-IAM.bat','SETUP-AND-LAUNCH.bat','MERGE-INTO-ONE.bat','INSTALL.bat','RESTART-WEB-UI.bat');" ^
   "$shell=New-Object -ComObject WScript.Shell;" ^
-  "@('Launch-Investment-Management.bat','Kalici Investment Management.lnk','Investment Management.bat','GET-IAM-NOW.bat') | ForEach-Object {" ^
-  "  $p=Join-Path $desk $_; if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force }" ^
+  "foreach ($d in $desks) {" ^
+  "  foreach ($n in $kill) { $p=Join-Path $d $n; if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force; Write-Host ('  removed ' + $p) } };" ^
+  "  Get-ChildItem -LiteralPath $d -Filter '*.lnk' | ForEach-Object { $t=$shell.CreateShortcut($_.FullName).TargetPath; if ($t -match 'Investment Management|Kalici|START-IAM|GET-IAM|Launch-Investment|iam-standalone') { Remove-Item $_.FullName -Force; Write-Host ('  removed ' + $_.FullName) } }" ^
   "};" ^
-  "$lnk=Join-Path $desk 'Investment Management.lnk';" ^
-  "$s=$shell.CreateShortcut($lnk);" ^
-  "$s.TargetPath='%~f0';" ^
-  "$s.WorkingDirectory='%ROOT%';" ^
-  "$s.Description='Investment Management — ledger + web UI';" ^
-  "$s.IconLocation='$env:SystemRoot\System32\imageres.dll,109';" ^
-  "$s.Save();" ^
-  "Write-Host ' [OK] Desktop shortcut: Investment Management.lnk'"
+  "foreach ($d in $desks) {" ^
+  "  $lnk=Join-Path $d 'Investment Management.lnk';" ^
+  "  $s=$shell.CreateShortcut($lnk);" ^
+  "  $s.TargetPath='%~f0'; $s.WorkingDirectory='%ROOT%';" ^
+  "  $s.Description='Investment Management — ledger + web UI';" ^
+  "  $s.IconLocation='$env:SystemRoot\System32\imageres.dll,109'; $s.Save();" ^
+  "  Write-Host (' [OK] Desktop shortcut: ' + $lnk)" ^
+  "}"
 
 REM --- Free stale ports then start ledger ---
 for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":8000" ^| findstr "LISTENING"') do (
