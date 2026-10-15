@@ -9,6 +9,7 @@ import {
 import { ensurePositiveRealizedPnL } from "./positiveRealized";
 import {
   cleanBootstrap,
+  emptySnapshot,
   sanitize,
   containsCorruptHistory,
   isLegacySnapshot,

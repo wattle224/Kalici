@@ -26,16 +26,19 @@ import TradingChart from "./TradingChart";
 import {
   cleanBootstrap,
   clearTradingStorage,
+  emptySnapshot,
   saveSnapshot,
   settledFills,
   type TradingSnapshotWithAutomation,
 } from "@/lib/trading";
 
 export default function TradingDashboard() {
-  const [snapshot, setSnapshot] = useState<TradingSnapshotWithAutomation>(() =>
-    loadSnapshot()
+  // Stable empty shell on SSR + first client paint (avoids Date.now()/timezone hydration errors)
+  const [snapshot, setSnapshot] = useState<TradingSnapshotWithAutomation>(
+    () => emptySnapshot() as TradingSnapshotWithAutomation
   );
-  const [now, setNow] = useState(() => Date.now());
+  const [hydrated, setHydrated] = useState(false);
+  const [now, setNow] = useState(0);
   const [apiConnected, setApiConnected] = useState(false);
   const [coinbase, setCoinbase] = useState<CoinbaseConnectionStatus | null>(
     null
@@ -184,18 +187,22 @@ export default function TradingDashboard() {
   }, []);
 
   useEffect(() => {
+    setNow(Date.now());
+    setSnapshot(loadSnapshot());
+    setHydrated(true);
     void loadFromApi();
     void testCoinbase();
     void loadMarketCharts();
   }, [loadFromApi, testCoinbase, loadMarketCharts]);
 
   useEffect(() => {
+    if (!hydrated) return;
     const id = window.setInterval(() => {
       void testCoinbase();
       void loadMarketCharts();
     }, 8_000);
     return () => window.clearInterval(id);
-  }, [testCoinbase, loadMarketCharts]);
+  }, [hydrated, testCoinbase, loadMarketCharts]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -221,6 +228,7 @@ export default function TradingDashboard() {
   }, [persist, snapshot]);
 
   useEffect(() => {
+    if (!hydrated) return;
     const tick = async () => {
       setNow(Date.now());
       if (apiConnected) {
@@ -228,18 +236,18 @@ export default function TradingDashboard() {
         return;
       }
       setSnapshot((current) => {
-        const hydrated = hydrateSnapshot(current);
-        if (JSON.stringify(hydrated) !== JSON.stringify(current)) {
-          saveSnapshot(hydrated);
+        const next = hydrateSnapshot(current);
+        if (JSON.stringify(next) !== JSON.stringify(current)) {
+          saveSnapshot(next);
         }
-        return hydrated;
+        return next;
       });
     };
     void tick();
     const pollMs = snapshot.executionState === "running" ? 5_000 : 10_000;
     const id = window.setInterval(() => void tick(), pollMs);
     return () => window.clearInterval(id);
-  }, [snapshot.executionState, apiConnected, loadFromApi]);
+  }, [hydrated, snapshot.executionState, apiConnected, loadFromApi]);
 
   const realizedTotal = useMemo(
     () => totalRealizedPnL(snapshot.trades),
@@ -277,9 +285,14 @@ export default function TradingDashboard() {
           </>
         ) : null}
         . Prices refresh every 8s. Last update:{" "}
-        <strong>
-          {lastRefreshAt
-            ? new Date(lastRefreshAt).toLocaleTimeString()
+        <strong suppressHydrationWarning>
+          {hydrated && lastRefreshAt
+            ? new Date(lastRefreshAt).toLocaleTimeString("en-GB", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: false,
+              })
             : "—"}
         </strong>
         .
