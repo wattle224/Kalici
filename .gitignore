@@ -22,3 +22,8 @@ web/.next/
 
 # Root (ledger API tooling)
 node_modules/
+
+__pycache__/
+*.pyc
+*.tsbuildinfo
+web/.next/

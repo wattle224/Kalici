@@ -60,25 +60,38 @@ struct DashboardView: View {
                 .font(.headline)
 
             if store.summary.pendingCapitalCalls > 0 {
-                HStack {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundStyle(.orange)
-                    VStack(alignment: .leading) {
-                        Text("Pending capital calls")
-                            .font(.subheadline.weight(.medium))
-                        Text(MoneyFormat.string(from: store.summary.pendingCapitalCalls))
+                NavigationLink {
+                    CapitalActivityView()
+                } label: {
+                    HStack {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .foregroundStyle(.orange)
+                        VStack(alignment: .leading) {
+                            Text("Pending capital calls")
+                                .font(.subheadline.weight(.medium))
+                            Text(MoneyFormat.string(from: store.summary.pendingCapitalCalls))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.tertiary)
                     }
-                    Spacer()
+                    .padding()
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                 }
-                .padding()
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .buttonStyle(.plain)
             }
 
             ForEach(store.capitalEvents.filter { $0.status == .inReview }.prefix(3)) { event in
                 if let investment = store.investment(for: event.investmentID) {
-                    CapitalEventRow(event: event, investmentName: investment.name)
+                    NavigationLink {
+                        CapitalActivityView()
+                    } label: {
+                        CapitalEventRow(event: event, investmentName: investment.name)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }

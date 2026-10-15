@@ -1,91 +1,83 @@
-# ATLAS
+# Investment Management
 
-ATLAS is a SwiftUI iOS app for private markets investment operations. It provides a mobile command center for portfolio oversight, capital activity, valuations, and official reporting workflows.
+**One app. One shortcut. One URL.**
 
-## Features
+| | |
+|---|---|
+| **Start** | Double-click **`Investment-Management.bat`** |
+| **Desktop** | Shortcut named **Investment Management** |
+| **Open** | http://127.0.0.1:3000/ |
+| **API** | http://127.0.0.1:8000/health |
 
-- **Dashboard** — portfolio NAV, unfunded commitments, and items requiring attention
-- **Portfolio** — investment positions with commitment, call, and distribution metrics
-- **Capital** — capital calls and distributions with workflow status
-- **Trading** — execution pause state, open-position unrealized P&L, and trade history (confirmed fills only; skipped intents excluded)
-- **Valuations** — NAV records and approval status by investment
-- **Reports** — operational report queue with period and generation metadata
+Keep the two black windows open while you use the app.
 
-Sample data is included for local development and demos.
+---
 
-## Requirements
+## Full install (Windows) — do this once
 
-- Xcode 15 or later
-- iOS 17.0 or later
-- macOS for building and running on simulator or device
+**PowerShell (copy/paste all of it):**
 
-## Investment Management (Windows desktop)
-
-**Error:** `Ledger data could not be loaded from the API … port 8000` means the **ledger API is not running**.
-
-**You do not need `C:\Users\User\Kalici`** — that was only an example. Use wherever Kalici is on your PC, or install it to your Desktop:
-
-### First-time setup (easiest)
-
-1. Download or clone the repo to **`Desktop\Kalici`**:
-   ```bat
-   git clone https://github.com/wattle224/Kalici.git %USERPROFILE%\Desktop\Kalici
-   ```
-2. Open **`Desktop\Kalici`** in File Explorer.
-3. Double-click **`SETUP-AND-LAUNCH.bat`** — creates the Desktop shortcut and starts IAM.
-
-Or double-click **`Install-Kalici-To-Desktop.bat`** from the repo (clones to Desktop if missing).
-
-### Already have the folder?
-
-Open the Kalici folder in File Explorer (wherever it is), then double-click:
-
-```bat
-CREATE-DESKTOP-SHORTCUT.bat
-Launch-Investment-Management.bat
+```powershell
+$bat = Join-Path $env:TEMP 'INSTALL-Investment-Management.bat'
+Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/cursor/iam-full-audit-ae22/INSTALL.bat' -OutFile $bat
+cmd /c $bat
 ```
 
-To find an existing install, search File Explorer for **`Launch-Investment-Management.bat`**.
+Or download **`INSTALL.bat`** and double-click it.
 
-The launcher starts:
+That will:
 
-1. **Ledger API** — http://127.0.0.1:8000 (`GET /api/ledger`, `GET /health`)
-2. **Web UI** — http://127.0.0.1:3000
+1. Delete **all** old Desktop / OneDrive Desktop IAM shortcuts  
+2. Install to **`Desktop\Investment Management`**  
+3. Create **one** new shortcut: **Investment Management**  
+4. Start ledger + web UI and open http://127.0.0.1:3000/  
 
-Keep both console windows open. Verify API: http://127.0.0.1:8000/health
+Accept Node.js install if asked. Keep the black windows open. Use **Ctrl+F5** if the page looks cached.
 
-Manual start:
+That single launcher:
+
+- installs Node if missing  
+- starts the ledger (port **8000**)  
+- starts the web UI (port **3000**) using `npm.cmd` (avoids PowerShell script blocks)  
+- creates **one** Desktop shortcut  
+- opens Coinbase-backed price + depth charts  
+
+---
+
+## Stop using these (they cause confusion)
+
+- `C:\Users\User\projects\Investment Management` (old Python stack)  
+- OneDrive `Launch-Investment-Management.bat` pointing at that old folder  
+- Extra shortcuts: Kalici, GET-IAM-NOW, START-IAM, etc.
+
+After merge, only use:
+
+**Desktop → Investment Management**
+
+---
+
+## What you get in the UI
+
+- Live **Coinbase** prices, price chart, and depth chart  
+- XRP-USD order history / execution ONLINE·OFFLINE  
+- Clean restart, refresh, Test Coinbase  
+
+---
+
+## Optional / advanced
+
+| File | When to use |
+|------|-------------|
+| `FIX-UTF16.bat` | Only if an **old Python** file shows `SyntaxError: ∀` |
+| `DIAGNOSE-PORTS.bat` | Check what is on ports 3000 / 8000 |
+| `ATLAS/` | Separate iOS app (Xcode) — not required for Windows |
+
+---
+
+## Manual start (developers)
 
 ```bash
-npm install          # repo root — installs tsx for ledger
-npm run ledger       # port 8000
-cd web && npm install && npm run dev   # port 3000
+npm run ledger          # :8000
+cd web && npm install && npm run dev   # :3000
+npm run coinbase        # connectivity check
 ```
-
-## Web trading dashboard (port 3000)
-
-Open http://127.0.0.1:3000/ — **XRP-USD** order history table. Header shows `Kalici · XRP-USD · local execution · API :8000` when the ledger API is connected. Use **Clean restart** or `?cleanRestart=1` to reset ledger data.
-
-**Share feedback** — floating button opens an interactive form. Emails go to `sbarryfr@gmail.com` with subject `[Kalici Trading Feedback] {category} — {preview}`. Copy `web/.env.example` to `web/.env.local` and set Gmail SMTP (app password) for server-side send; otherwise the mail app opens with a pre-filled draft.
-
-## Getting started (iOS)
-
-1. Open `ATLAS.xcodeproj` in Xcode.
-2. Select the **ATLAS** scheme and target.
-3. Under **Signing & Capabilities**, choose your Team and update the bundle identifier if needed (`com.kalici.atlas` by default).
-4. Build and run on a simulator or device.
-
-## Project structure
-
-```
-ATLAS/
-├── ATLASApp.swift          # App entry point
-├── Models/                 # Domain models
-├── Services/               # Data store (sample data)
-├── Utilities/              # Formatting helpers
-└── Views/                  # SwiftUI screens and components
-```
-
-## Notes
-
-This repository previously referenced `InvestmentOps.xcodeproj`. The app has been consolidated under the **ATLAS** name and project.

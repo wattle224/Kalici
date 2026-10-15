@@ -5,12 +5,32 @@ struct CapitalActivityView: View {
 
     var body: some View {
         NavigationStack {
-            List(store.capitalEvents.sorted { $0.dueDate < $1.dueDate }) { event in
-                if let investment = store.investment(for: event.investmentID) {
-                    CapitalEventRow(event: event, investmentName: investment.name)
+            List {
+                ForEach(store.capitalEvents.sorted { $0.dueDate < $1.dueDate }) { event in
+                    if let investment = store.investment(for: event.investmentID) {
+                        CapitalEventRow(event: event, investmentName: investment.name)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button("Advance") {
+                                    store.advanceCapitalEventStatus(event.id)
+                                }
+                                .tint(.blue)
+                            }
+                            .contextMenu {
+                                Button("Advance status") {
+                                    store.advanceCapitalEventStatus(event.id)
+                                }
+                            }
+                    }
                 }
             }
             .navigationTitle("Capital Activity")
+            .toolbar {
+                ToolbarItem(placement: .bottomBar) {
+                    Text("Swipe or long-press a row to advance status")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .preferredColorScheme(.dark)
     }

@@ -6,10 +6,26 @@ param(
 $ErrorActionPreference = "Stop"
 
 $RepoPath = $RepoPath.TrimEnd('\')
-$Launcher = Join-Path $RepoPath "Launch-Investment-Management.bat"
 
-if (-not (Test-Path -LiteralPath $Launcher)) {
-    Write-Error "Launcher not found: $Launcher"
+# Single entry point — prefer the unified launcher
+$candidates = @(
+    (Join-Path $RepoPath "Investment-Management.bat"),
+    (Join-Path $RepoPath "Launch-Investment-Management.bat"),
+    (Join-Path $RepoPath "START-IAM.bat"),
+    (Join-Path $RepoPath "RUN-IAM.bat"),
+    (Join-Path $RepoPath "iam-standalone\RUN-IAM.bat")
+)
+
+$PrimaryLauncher = $null
+foreach ($c in $candidates) {
+    if (Test-Path -LiteralPath $c) {
+        $PrimaryLauncher = $c
+        break
+    }
+}
+
+if (-not $PrimaryLauncher) {
+    Write-Error "No Investment Management launcher found under: $RepoPath"
     exit 1
 }
 
@@ -19,11 +35,16 @@ if (-not (Test-Path -LiteralPath $Desktop)) {
     exit 1
 }
 
+# Remove ALL old confusing shortcuts / wrappers — keep one
 $oldNames = @(
     "Launch-Investment-Management.bat",
     "Investment Management.lnk",
     "Investment Management.bat",
-    "Kalici Investment Management.lnk"
+    "Kalici Investment Management.lnk",
+    "GET-IAM-NOW.bat",
+    "START-IAM.bat",
+    "RUN-IAM.bat",
+    "Kalici.lnk"
 )
 
 foreach ($name in $oldNames) {
@@ -34,36 +55,21 @@ foreach ($name in $oldNames) {
     }
 }
 
-$wrapperBat = Join-Path $Desktop "Launch-Investment-Management.bat"
-@"
-@echo off
-REM Kalici — auto-generated Desktop launcher
-set "KALICI_ROOT=$RepoPath"
-call "%KALICI_ROOT%\Launch-Investment-Management.bat"
-"@ | Set-Content -LiteralPath $wrapperBat -Encoding ASCII
-Write-Host "Created: Launch-Investment-Management.bat"
-
 $shell = New-Object -ComObject WScript.Shell
-
 $lnkPath = Join-Path $Desktop "Investment Management.lnk"
 $lnk = $shell.CreateShortcut($lnkPath)
-$lnk.TargetPath = Join-Path $RepoPath "START-IAM.bat"
-$lnk.WorkingDirectory = $RepoPath
-$lnk.Description = "Start Investment Management ledger (port 8000)"
+$lnk.TargetPath = $PrimaryLauncher
+$lnk.WorkingDirectory = Split-Path -Parent $PrimaryLauncher
+$lnk.Description = "Investment Management — one-click start"
 $lnk.IconLocation = "$env:SystemRoot\System32\imageres.dll,109"
 $lnk.Save()
-Write-Host "Created: Investment Management.lnk"
 
-$lnk2Path = Join-Path $Desktop "Kalici Investment Management.lnk"
-$lnk2 = $shell.CreateShortcut($lnk2Path)
-$lnk2.TargetPath = $Launcher
-$lnk2.WorkingDirectory = $RepoPath
-$lnk2.Description = "Kalici Investment Management (XRP trading UI)"
-$lnk2.IconLocation = "$env:SystemRoot\System32\imageres.dll,109"
-$lnk2.Save()
-Write-Host "Created: Kalici Investment Management.lnk"
+if (-not (Test-Path -LiteralPath $lnk.TargetPath)) {
+    Write-Error "Shortcut target missing: $($lnk.TargetPath)"
+    exit 1
+}
 
-Write-Host ""
+Write-Host "VALID: Investment Management.lnk -> $($lnk.TargetPath)"
 Write-Host "Desktop: $Desktop"
 Write-Host "Repo:    $RepoPath"
 exit 0
