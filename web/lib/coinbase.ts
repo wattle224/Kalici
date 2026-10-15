@@ -122,6 +122,116 @@ export async function fetchCoinbaseTicker(
 
 const DEFAULT_PRODUCTS = ["XRP-USD", "ETH-USD", "BTC-USD", "SOL-USD"];
 
+export interface CoinbaseCandle {
+  time: number;
+  low: number;
+  high: number;
+  open: number;
+  close: number;
+  volume: number;
+}
+
+export interface DepthLevel {
+  price: number;
+  size: number;
+  numOrders: number;
+}
+
+export interface CoinbaseOrderBook {
+  symbol: string;
+  bids: DepthLevel[];
+  asks: DepthLevel[];
+  time: string | null;
+  mid: number | null;
+  spread: number | null;
+}
+
+/** Historic candles: [time, low, high, open, close, volume] */
+export async function fetchCoinbaseCandles(
+  productId: string,
+  granularitySec = 3600,
+  limit = 48
+): Promise<CoinbaseCandle[]> {
+  const raw = (await fetchJson(
+    `${COINBASE_EXCHANGE_BASE}/products/${encodeURIComponent(productId)}/candles?granularity=${granularitySec}`
+  )) as unknown[];
+
+  if (!Array.isArray(raw)) throw new Error("Invalid candles response");
+
+  const candles: CoinbaseCandle[] = [];
+  for (const row of raw) {
+    if (!Array.isArray(row) || row.length < 6) continue;
+    const time = toNumber(row[0]);
+    const low = toNumber(row[1]);
+    const high = toNumber(row[2]);
+    const open = toNumber(row[3]);
+    const close = toNumber(row[4]);
+    const volume = toNumber(row[5]);
+    if (
+      time == null ||
+      low == null ||
+      high == null ||
+      open == null ||
+      close == null ||
+      volume == null
+    ) {
+      continue;
+    }
+    candles.push({ time, low, high, open, close, volume });
+  }
+
+  return candles
+    .sort((a, b) => a.time - b.time)
+    .slice(-Math.max(2, limit));
+}
+
+/** Level-2 aggregated order book for depth chart. */
+export async function fetchCoinbaseOrderBook(
+  productId: string,
+  levels = 20
+): Promise<CoinbaseOrderBook> {
+  const raw = (await fetchJson(
+    `${COINBASE_EXCHANGE_BASE}/products/${encodeURIComponent(productId)}/book?level=2`
+  )) as {
+    bids?: unknown[];
+    asks?: unknown[];
+    time?: string;
+  };
+
+  const parseSide = (rows: unknown[] | undefined): DepthLevel[] => {
+    if (!Array.isArray(rows)) return [];
+    const out: DepthLevel[] = [];
+    for (const row of rows) {
+      if (!Array.isArray(row) || row.length < 2) continue;
+      const price = toNumber(row[0]);
+      const size = toNumber(row[1]);
+      const numOrders = toNumber(row[2]) ?? 0;
+      if (price == null || size == null || price <= 0 || size <= 0) continue;
+      out.push({ price, size, numOrders });
+      if (out.length >= levels) break;
+    }
+    return out;
+  };
+
+  const bids = parseSide(raw.bids);
+  const asks = parseSide(raw.asks);
+  const bestBid = bids[0]?.price ?? null;
+  const bestAsk = asks[0]?.price ?? null;
+  const mid =
+    bestBid != null && bestAsk != null ? (bestBid + bestAsk) / 2 : null;
+  const spread =
+    bestBid != null && bestAsk != null ? bestAsk - bestBid : null;
+
+  return {
+    symbol: productId.toUpperCase(),
+    bids,
+    asks,
+    time: typeof raw.time === "string" ? raw.time : null,
+    mid,
+    spread,
+  };
+}
+
 /** End-to-end connectivity check used by /api/coinbase and Validate-IAM. */
 export async function checkCoinbaseConnection(
   products: string[] = DEFAULT_PRODUCTS

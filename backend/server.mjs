@@ -209,6 +209,76 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if ((path === "/api/coinbase/market" || path === "/coinbase/market") && method === "GET") {
+    const product = (url.searchParams.get("product") || "XRP-USD").toUpperCase();
+    const granularity = Number(url.searchParams.get("granularity") || 3600);
+    const limit = Number(url.searchParams.get("limit") || 48);
+    const depth = Number(url.searchParams.get("depth") || 20);
+    try {
+      const [candlesRes, bookRes] = await Promise.all([
+        fetch(
+          `https://api.exchange.coinbase.com/products/${encodeURIComponent(product)}/candles?granularity=${granularity}`
+        ),
+        fetch(
+          `https://api.exchange.coinbase.com/products/${encodeURIComponent(product)}/book?level=2`
+        ),
+      ]);
+      if (!candlesRes.ok) throw new Error(`candles HTTP ${candlesRes.status}`);
+      if (!bookRes.ok) throw new Error(`book HTTP ${bookRes.status}`);
+      const rawCandles = await candlesRes.json();
+      const rawBook = await bookRes.json();
+      const candles = (Array.isArray(rawCandles) ? rawCandles : [])
+        .map((row) => ({
+          time: Number(row[0]),
+          low: Number(row[1]),
+          high: Number(row[2]),
+          open: Number(row[3]),
+          close: Number(row[4]),
+          volume: Number(row[5]),
+        }))
+        .filter((c) => Number.isFinite(c.time) && Number.isFinite(c.close))
+        .sort((a, b) => a.time - b.time)
+        .slice(-Math.max(2, limit));
+      const parseSide = (rows) =>
+        (Array.isArray(rows) ? rows : [])
+          .map((row) => ({
+            price: Number(row[0]),
+            size: Number(row[1]),
+            numOrders: Number(row[2]) || 0,
+          }))
+          .filter((l) => l.price > 0 && l.size > 0)
+          .slice(0, depth);
+      const bids = parseSide(rawBook.bids);
+      const asks = parseSide(rawBook.asks);
+      const bestBid = bids[0]?.price ?? null;
+      const bestAsk = asks[0]?.price ?? null;
+      json(res, 200, {
+        ok: true,
+        product,
+        candles,
+        book: {
+          symbol: product,
+          bids,
+          asks,
+          time: rawBook.time || null,
+          mid: bestBid != null && bestAsk != null ? (bestBid + bestAsk) / 2 : null,
+          spread: bestBid != null && bestAsk != null ? bestAsk - bestBid : null,
+        },
+        fetchedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      json(res, 503, {
+        ok: false,
+        product,
+        candles: [],
+        book: null,
+        error: err.message || String(err),
+        fetchedAt: new Date().toISOString(),
+      });
+    }
+    return;
+  }
+
   if (LEDGER_PATHS.has(path) && method === "GET") {
     json(res, 200, buildPayload(loadStore()));
     return;

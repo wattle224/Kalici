@@ -5,7 +5,11 @@ import {
   activitySummary,
   kickstartExecution,
 } from "@/lib/automation";
-import type { CoinbaseConnectionStatus } from "@/lib/coinbase";
+import type {
+  CoinbaseCandle,
+  CoinbaseConnectionStatus,
+  CoinbaseOrderBook,
+} from "@/lib/coinbase";
 import { getExecutionStatus } from "@/lib/executionStatus";
 import {
   fetchLedger,
@@ -15,8 +19,10 @@ import {
 import { formatCountdown, msUntil, totalRealizedPnL } from "@/lib/realization";
 import { hydrateSnapshot, loadSnapshot } from "@/lib/hydrate";
 import { ACTIVE_MARKET } from "@/lib/symbols";
+import DepthChart from "./DepthChart";
 import OrderHistoryTable from "./OrderHistoryTable";
 import TickerBanner from "./TickerBanner";
+import TradingChart from "./TradingChart";
 import {
   cleanBootstrap,
   clearTradingStorage,
@@ -36,6 +42,10 @@ export default function TradingDashboard() {
   );
   const [coinbaseBusy, setCoinbaseBusy] = useState(false);
   const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null);
+  const [candles, setCandles] = useState<CoinbaseCandle[]>([]);
+  const [orderBook, setOrderBook] = useState<CoinbaseOrderBook | null>(null);
+  const [marketBusy, setMarketBusy] = useState(false);
+  const [marketError, setMarketError] = useState<string | null>(null);
   const buildId = "iam-live-2026-10-15";
 
   const history = useMemo(() => settledFills(snapshot.trades), [snapshot.trades]);
@@ -136,15 +146,56 @@ export default function TradingDashboard() {
     }
   }, []);
 
+  const loadMarketCharts = useCallback(async () => {
+    setMarketBusy(true);
+    setMarketError(null);
+    const urls = [
+      `/api/coinbase/market?product=${encodeURIComponent(ACTIVE_MARKET)}`,
+      `http://127.0.0.1:8000/api/coinbase/market?product=${encodeURIComponent(ACTIVE_MARKET)}`,
+    ];
+    try {
+      let payload: {
+        ok?: boolean;
+        candles?: CoinbaseCandle[];
+        book?: CoinbaseOrderBook | null;
+        error?: string;
+      } | null = null;
+      for (const url of urls) {
+        try {
+          const res = await fetch(url, { cache: "no-store" });
+          if (!res.ok) continue;
+          payload = await res.json();
+          break;
+        } catch {
+          /* try next */
+        }
+      }
+      if (!payload?.ok) {
+        throw new Error(payload?.error || "Market data unavailable");
+      }
+      setCandles(payload.candles ?? []);
+      setOrderBook(payload.book ?? null);
+      setLastRefreshAt(Date.now());
+    } catch (err) {
+      setMarketError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMarketBusy(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadFromApi();
     void testCoinbase();
-  }, [loadFromApi, testCoinbase]);
+    void loadMarketCharts();
+  }, [loadFromApi, testCoinbase, loadMarketCharts]);
 
   useEffect(() => {
-    const id = window.setInterval(() => void testCoinbase(), 8_000);
+    const id = window.setInterval(() => {
+      void testCoinbase();
+      void loadMarketCharts();
+    }, 8_000);
     return () => window.clearInterval(id);
-  }, [testCoinbase]);
+  }, [testCoinbase, loadMarketCharts]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -248,6 +299,7 @@ export default function TradingDashboard() {
           onClick={() => {
             void loadFromApi();
             void testCoinbase();
+            void loadMarketCharts();
           }}
         >
           Refresh all
@@ -302,6 +354,21 @@ export default function TradingDashboard() {
             </ul>
           ) : null}
         </div>
+      </section>
+
+      <section className="charts-grid">
+        <TradingChart
+          symbol={ACTIVE_MARKET}
+          candles={candles}
+          loading={marketBusy && candles.length === 0}
+          error={marketError}
+        />
+        <DepthChart
+          symbol={ACTIVE_MARKET}
+          book={orderBook}
+          loading={marketBusy && !orderBook}
+          error={marketError}
+        />
       </section>
 
       <div
