@@ -5,6 +5,7 @@ import {
   activitySummary,
   kickstartExecution,
 } from "@/lib/automation";
+import type { CoinbaseConnectionStatus } from "@/lib/coinbase";
 import { getExecutionStatus } from "@/lib/executionStatus";
 import {
   fetchLedger,
@@ -29,6 +30,10 @@ export default function TradingDashboard() {
   );
   const [now, setNow] = useState(() => Date.now());
   const [apiConnected, setApiConnected] = useState(false);
+  const [coinbase, setCoinbase] = useState<CoinbaseConnectionStatus | null>(
+    null
+  );
+  const [coinbaseBusy, setCoinbaseBusy] = useState(false);
 
   const history = useMemo(() => settledFills(snapshot.trades), [snapshot.trades]);
   const activity = useMemo(
@@ -91,9 +96,35 @@ export default function TradingDashboard() {
     await persist(cleanBootstrap());
   }, [applySnapshot, persist]);
 
+  const testCoinbase = useCallback(async () => {
+    setCoinbaseBusy(true);
+    try {
+      const res = await fetch(
+        `/api/coinbase?products=${encodeURIComponent(ACTIVE_MARKET)},ETH-USD,BTC-USD`,
+        { cache: "no-store" }
+      );
+      const data = (await res.json()) as CoinbaseConnectionStatus;
+      setCoinbase(data);
+    } catch (err) {
+      setCoinbase({
+        ok: false,
+        connected: false,
+        service: "coinbase",
+        message: "Coinbase request failed",
+        checkedAt: new Date().toISOString(),
+        latencyMs: 0,
+        products: [],
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setCoinbaseBusy(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadFromApi();
-  }, [loadFromApi]);
+    void testCoinbase();
+  }, [loadFromApi, testCoinbase]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -180,7 +211,57 @@ export default function TradingDashboard() {
         <button type="button" onClick={() => void loadFromApi()}>
           Refresh ledger
         </button>
+        <button
+          type="button"
+          onClick={() => void testCoinbase()}
+          disabled={coinbaseBusy}
+        >
+          {coinbaseBusy ? "Testing Coinbase…" : "Test Coinbase"}
+        </button>
       </div>
+
+      <section>
+        <h2>Coinbase connection</h2>
+        <div
+          className={`card coinbase-status ${
+            coinbase?.connected ? "coinbase-ok" : "coinbase-fail"
+          }`}
+        >
+          <div className="coinbase-row">
+            <strong>
+              {coinbase == null
+                ? "Checking…"
+                : coinbase.connected
+                  ? "CONNECTED"
+                  : "NOT CONNECTED"}
+            </strong>
+            <span className="meta">
+              {coinbase?.latencyMs != null ? `${coinbase.latencyMs} ms` : "—"}
+            </span>
+          </div>
+          <p className="meta" style={{ margin: "0.35rem 0 0" }}>
+            {coinbase?.message ?? "Contacting Coinbase Exchange…"}
+          </p>
+          {coinbase?.error ? (
+            <p className="hint" style={{ color: "var(--red)" }}>
+              {coinbase.error}
+            </p>
+          ) : null}
+          {coinbase?.products?.length ? (
+            <ul className="coinbase-prices">
+              {coinbase.products.map((p) => (
+                <li key={p.symbol}>
+                  <span>{p.symbol}</span>
+                  <span className="mono">
+                    ${p.price.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                  </span>
+                  <span className="meta">{p.source}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      </section>
 
       <div
         className={`execution-banner ${execStatus.isOnline ? "running" : "paused"}`}

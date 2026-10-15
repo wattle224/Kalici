@@ -142,6 +142,64 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if ((route === "/api/coinbase" || route === "/coinbase") && method === "GET") {
+    try {
+      const products = (url.searchParams.get("products") || "XRP-USD,ETH-USD,BTC-USD")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const started = Date.now();
+      const tickers = [];
+      const errors = [];
+      for (const product of products) {
+        try {
+          const r = await fetch(
+            `https://api.exchange.coinbase.com/products/${encodeURIComponent(product)}/ticker`
+          );
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const data = await r.json();
+          const price = Number(data.price);
+          if (!Number.isFinite(price) || price <= 0) throw new Error("bad price");
+          tickers.push({
+            symbol: product,
+            price,
+            bid: Number(data.bid) || null,
+            ask: Number(data.ask) || null,
+            volume: Number(data.volume) || null,
+            time: data.time || null,
+            source: "exchange",
+          });
+        } catch (err) {
+          errors.push(`${product}: ${err.message || err}`);
+        }
+      }
+      json(res, tickers.length ? 200 : 503, {
+        ok: tickers.length > 0,
+        connected: tickers.length > 0,
+        service: "coinbase",
+        message: tickers.length
+          ? `Connected to Coinbase — ${tickers.length} product(s)`
+          : "Could not reach Coinbase APIs",
+        checkedAt: new Date().toISOString(),
+        latencyMs: Date.now() - started,
+        products: tickers,
+        ...(errors.length ? { error: errors.join("; ") } : {}),
+      });
+    } catch (err) {
+      json(res, 503, {
+        ok: false,
+        connected: false,
+        service: "coinbase",
+        message: "Coinbase check failed",
+        checkedAt: new Date().toISOString(),
+        latencyMs: 0,
+        products: [],
+        error: err.message || String(err),
+      });
+    }
+    return;
+  }
+
   if (LEDGER_PATHS.has(route) && method === "GET") {
     json(res, 200, buildPayload(loadStore()));
     return;

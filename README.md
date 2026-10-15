@@ -49,22 +49,29 @@ To find an existing install, search File Explorer for **`Launch-Investment-Manag
 
 The launcher starts:
 
-1. **Ledger API** — http://127.0.0.1:8000 (`GET /api/ledger`, `GET /health`)
+1. **Ledger API** — http://127.0.0.1:8000 (`GET /api/ledger`, `GET /health`, `GET /api/coinbase`)
 2. **Web UI** — http://127.0.0.1:3000
 
-Keep both console windows open. Verify API: http://127.0.0.1:8000/health
+Keep both console windows open. Verify:
+
+- Health: http://127.0.0.1:8000/health
+- Coinbase: http://127.0.0.1:8000/api/coinbase
+- Or run `Validate-IAM.bat` / `npm run coinbase`
+
+**Desktop shortcut:** `Install-Desktop-Launcher.bat` or `CREATE-DESKTOP-SHORTCUT.bat` creates **Investment Management.lnk**. Validate with `Validate-Desktop-Shortcut.bat`.
 
 Manual start:
 
 ```bash
-npm install          # repo root — installs tsx for ledger
+npm install
 npm run ledger       # port 8000
 cd web && npm install && npm run dev   # port 3000
+npm run coinbase     # test Coinbase Exchange public API
 ```
 
 ## Web trading dashboard (port 3000)
 
-Open http://127.0.0.1:3000/ — **XRP-USD** order history table. Header shows `Kalici · XRP-USD · local execution · API :8000` when the ledger API is connected. Use **Clean restart** or `?cleanRestart=1` to reset ledger data.
+Open http://127.0.0.1:3000/ — **XRP-USD** order history table. Buttons: **Resume/Pause execution**, **Clean restart**, **Refresh ledger**, **Test Coinbase**. Coinbase uses the public Exchange market-data API (no API keys for price checks).
 
 **Share feedback** — floating button opens an interactive form. Emails go to `sbarryfr@gmail.com` with subject `[Kalici Trading Feedback] {category} — {preview}`. Copy `web/.env.example` to `web/.env.local` and set Gmail SMTP (app password) for server-side send; otherwise the mail app opens with a pre-filled draft.
 
