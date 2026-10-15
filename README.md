@@ -1,115 +1,69 @@
-# ATLAS
+# Investment Management
 
-ATLAS is a SwiftUI iOS app for private markets investment operations. It provides a mobile command center for portfolio oversight, capital activity, valuations, and official reporting workflows.
+**One app. One shortcut. One URL.**
 
-## Features
+| | |
+|---|---|
+| **Start** | Double-click **`Investment-Management.bat`** |
+| **Desktop** | Shortcut named **Investment Management** |
+| **Open** | http://127.0.0.1:3000/ |
+| **API** | http://127.0.0.1:8000/health |
 
-- **Dashboard** — portfolio NAV, unfunded commitments, and items requiring attention
-- **Portfolio** — investment positions with commitment, call, and distribution metrics
-- **Capital** — capital calls and distributions with workflow status
-- **Trading** — execution pause state, open-position unrealized P&L, and trade history (confirmed fills only; skipped intents excluded)
-- **Valuations** — NAV records and approval status by investment
-- **Reports** — operational report queue with period and generation metadata
-
-Sample data is included for local development and demos.
-
-## Requirements
-
-- Xcode 15 or later
-- iOS 17.0 or later
-- macOS for building and running on simulator or device
-
-## Investment Management (Windows desktop)
-
-### Error: `SyntaxError: invalid character '∀' (U+2200)`
-
-Your Python source was saved as **UTF-16** (often by PowerShell `>` / `Out-File` / default `Set-Content`). Fix it:
-
-1. Copy **`FIX-UTF16.bat`** into `C:\Users\User\projects\Investment Management` (or run it from this repo).
-2. Double-click **`FIX-UTF16.bat`** — it repairs `backend\app\services\*.py` and writes `.bak` backups.
-3. Or manually:
-   ```bat
-   cd "C:\Users\User\projects\Investment Management"
-   python scripts\fix-utf16-byteswap.py backend --apply --backup
-   ```
-4. Restart with `Launch-Investment-Management.bat`.
-
-In PowerShell always use: `Set-Content -Encoding utf8 path\to\file.py`
+Keep the two black windows open while you use the app.
 
 ---
 
-**Error:** `Ledger data could not be loaded from the API … port 8000` means the **ledger API is not running**.
+## First-time setup (Windows)
 
-**You do not need `C:\Users\User\Kalici`** — that was only an example. Use wherever Kalici is on your PC, or install it to your Desktop:
+1. Download / clone this repo, **or** double-click **`MERGE-INTO-ONE.bat`** to install to `Desktop\Investment Management`.
+2. Double-click **`Investment-Management.bat`** (or the Desktop shortcut).
+3. Accept Node.js install if asked.
+4. Browser opens http://127.0.0.1:3000/ — hard refresh with **Ctrl+F5** if needed.
 
-### First-time setup (easiest)
+That single launcher:
 
-1. Download or clone the repo to **`Desktop\Kalici`**:
-   ```bat
-   git clone https://github.com/wattle224/Kalici.git %USERPROFILE%\Desktop\Kalici
-   ```
-2. Open **`Desktop\Kalici`** in File Explorer.
-3. Double-click **`SETUP-AND-LAUNCH.bat`** — creates the Desktop shortcut and starts IAM.
+- installs Node if missing  
+- starts the ledger (port **8000**)  
+- starts the web UI (port **3000**) using `npm.cmd` (avoids PowerShell script blocks)  
+- creates **one** Desktop shortcut  
+- opens Coinbase-backed price + depth charts  
 
-Or double-click **`Install-Kalici-To-Desktop.bat`** from the repo (clones to Desktop if missing).
+---
 
-### Already have the folder?
+## Stop using these (they cause confusion)
 
-Open the Kalici folder in File Explorer (wherever it is), then double-click:
+- `C:\Users\User\projects\Investment Management` (old Python stack)  
+- OneDrive `Launch-Investment-Management.bat` pointing at that old folder  
+- Extra shortcuts: Kalici, GET-IAM-NOW, START-IAM, etc.
 
-```bat
-CREATE-DESKTOP-SHORTCUT.bat
-Launch-Investment-Management.bat
-```
+After merge, only use:
 
-To find an existing install, search File Explorer for **`Launch-Investment-Management.bat`**.
+**Desktop → Investment Management**
 
-The launcher starts:
+---
 
-1. **Ledger API** — http://127.0.0.1:8000 (`GET /api/ledger`, `GET /health`, `GET /api/coinbase`)
-2. **Web UI** — http://127.0.0.1:3000
+## What you get in the UI
 
-Keep both console windows open. Verify:
+- Live **Coinbase** prices, price chart, and depth chart  
+- XRP-USD order history / execution ONLINE·OFFLINE  
+- Clean restart, refresh, Test Coinbase  
 
-- Health: http://127.0.0.1:8000/health
-- Coinbase: http://127.0.0.1:8000/api/coinbase
-- Or run `Validate-IAM.bat` / `npm run coinbase`
+---
 
-**Desktop shortcut:** `Install-Desktop-Launcher.bat` or `CREATE-DESKTOP-SHORTCUT.bat` creates **Investment Management.lnk**. Validate with `Validate-Desktop-Shortcut.bat`.
+## Optional / advanced
 
-Manual start:
+| File | When to use |
+|------|-------------|
+| `FIX-UTF16.bat` | Only if an **old Python** file shows `SyntaxError: ∀` |
+| `DIAGNOSE-PORTS.bat` | Check what is on ports 3000 / 8000 |
+| `ATLAS/` | Separate iOS app (Xcode) — not required for Windows |
+
+---
+
+## Manual start (developers)
 
 ```bash
-npm install
-npm run ledger       # port 8000
-cd web && npm install && npm run dev   # port 3000
-npm run coinbase     # test Coinbase Exchange public API
+npm run ledger          # :8000
+cd web && npm install && npm run dev   # :3000
+npm run coinbase        # connectivity check
 ```
-
-## Web trading dashboard (port 3000)
-
-Open http://127.0.0.1:3000/ — **XRP-USD** order history table. Buttons: **Resume/Pause execution**, **Clean restart**, **Refresh ledger**, **Test Coinbase**. Coinbase uses the public Exchange market-data API (no API keys for price checks).
-
-**Share feedback** — floating button opens an interactive form. Emails go to `sbarryfr@gmail.com` with subject `[Kalici Trading Feedback] {category} — {preview}`. Copy `web/.env.example` to `web/.env.local` and set Gmail SMTP (app password) for server-side send; otherwise the mail app opens with a pre-filled draft.
-
-## Getting started (iOS)
-
-1. Open `ATLAS.xcodeproj` in Xcode.
-2. Select the **ATLAS** scheme and target.
-3. Under **Signing & Capabilities**, choose your Team and update the bundle identifier if needed (`com.kalici.atlas` by default).
-4. Build and run on a simulator or device.
-
-## Project structure
-
-```
-ATLAS/
-├── ATLASApp.swift          # App entry point
-├── Models/                 # Domain models
-├── Services/               # Data store (sample data)
-├── Utilities/              # Formatting helpers
-└── Views/                  # SwiftUI screens and components
-```
-
-## Notes
-
-This repository previously referenced `InvestmentOps.xcodeproj`. The app has been consolidated under the **ATLAS** name and project.
