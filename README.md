@@ -21,6 +21,23 @@ Sample data is included for local development and demos.
 
 ## Investment Management (Windows desktop)
 
+### Error: `SyntaxError: invalid character '∀' (U+2200)`
+
+Your Python source was saved as **UTF-16** (often by PowerShell `>` / `Out-File` / default `Set-Content`). Fix it:
+
+1. Copy **`FIX-UTF16.bat`** into `C:\Users\User\projects\Investment Management` (or run it from this repo).
+2. Double-click **`FIX-UTF16.bat`** — it repairs `backend\app\services\*.py` and writes `.bak` backups.
+3. Or manually:
+   ```bat
+   cd "C:\Users\User\projects\Investment Management"
+   python scripts\fix-utf16-byteswap.py backend --apply --backup
+   ```
+4. Restart with `Launch-Investment-Management.bat`.
+
+In PowerShell always use: `Set-Content -Encoding utf8 path\to\file.py`
+
+---
+
 **Error:** `Ledger data could not be loaded from the API … port 8000` means the **ledger API is not running**.
 
 **You do not need `C:\Users\User\Kalici`** — that was only an example. Use wherever Kalici is on your PC, or install it to your Desktop:
