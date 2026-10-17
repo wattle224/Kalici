@@ -137,6 +137,16 @@ export function sanitize(snapshot: TradingSnapshot): TradingSnapshot {
 
 const XRP_LOT = 6.388578;
 
+/** Empty shell for SSR — no Date.now() so server HTML matches client first paint. */
+export function emptySnapshot(): TradingSnapshot {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    executionState: "paused",
+    openPositions: [],
+    trades: [],
+  };
+}
+
 export function cleanBootstrap(): TradingSnapshot {
   const now = Date.now();
   const buyAt = new Date(now - 3 * 3600_000).toISOString();

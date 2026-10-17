@@ -4,7 +4,9 @@
   "scripts": {
     "ledger": "node backend/server.mjs",
     "web": "npm run dev --prefix web",
-    "dev": "npx concurrently -k \"npm run ledger\" \"npm run web\""
+    "dev": "npx concurrently -k \"npm run ledger\" \"npm run web\"",
+    "coinbase": "node backend/coinbase-check.mjs",
+    "validate": "node backend/coinbase-check.mjs && curl -sf http://127.0.0.1:8000/health"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",

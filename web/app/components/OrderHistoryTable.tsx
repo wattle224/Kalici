@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   formatPrice,
   formatTradeStatus,
@@ -14,7 +15,22 @@ function formatFilledTime(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+    hour12: false,
   });
+}
+
+/** Stable placeholder until client mount — avoids SSR/local timezone hydration mismatch. */
+function FilledTime({ iso }: { iso: string }) {
+  const [text, setText] = useState(() =>
+    // UTC fixed format matches on server + first client paint
+    new Date(iso).toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC")
+  );
+
+  useEffect(() => {
+    setText(formatFilledTime(iso));
+  }, [iso]);
+
+  return <time dateTime={iso}>{text}</time>;
 }
 
 export default function OrderHistoryTable({ trades }: { trades: Trade[] }) {
@@ -45,10 +61,18 @@ export default function OrderHistoryTable({ trades }: { trades: Trade[] }) {
                 {trade.side.toUpperCase()}
               </td>
               <td>{trade.orderType ?? "MARKET"}</td>
-              <td>{trade.quantity.toLocaleString("en-GB", { maximumFractionDigits: 6 })}</td>
+              <td>
+                {trade.quantity.toLocaleString("en-GB", {
+                  maximumFractionDigits: 6,
+                })}
+              </td>
               <td>{formatPrice(trade.executionPrice, trade.symbol)}</td>
-              <td>{formatFilledTime(trade.executedAt)}</td>
-              <td className="status-filled">{formatTradeStatus(trade.status)}</td>
+              <td>
+                <FilledTime iso={trade.executedAt} />
+              </td>
+              <td className="status-filled">
+                {formatTradeStatus(trade.status)}
+              </td>
               <td>{trade.source}</td>
             </tr>
           ))}

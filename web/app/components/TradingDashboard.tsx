@@ -5,6 +5,11 @@ import {
   activitySummary,
   kickstartExecution,
 } from "@/lib/automation";
+import type {
+  CoinbaseCandle,
+  CoinbaseConnectionStatus,
+  CoinbaseOrderBook,
+} from "@/lib/coinbase";
 import { getExecutionStatus } from "@/lib/executionStatus";
 import {
   fetchLedger,
@@ -14,21 +19,37 @@ import {
 import { formatCountdown, msUntil, totalRealizedPnL } from "@/lib/realization";
 import { hydrateSnapshot, loadSnapshot } from "@/lib/hydrate";
 import { ACTIVE_MARKET } from "@/lib/symbols";
+import DepthChart from "./DepthChart";
 import OrderHistoryTable from "./OrderHistoryTable";
+import TickerBanner from "./TickerBanner";
+import TradingChart from "./TradingChart";
 import {
   cleanBootstrap,
   clearTradingStorage,
+  emptySnapshot,
   saveSnapshot,
   settledFills,
   type TradingSnapshotWithAutomation,
 } from "@/lib/trading";
 
 export default function TradingDashboard() {
-  const [snapshot, setSnapshot] = useState<TradingSnapshotWithAutomation>(() =>
-    loadSnapshot()
+  // Stable empty shell on SSR + first client paint (avoids Date.now()/timezone hydration errors)
+  const [snapshot, setSnapshot] = useState<TradingSnapshotWithAutomation>(
+    () => emptySnapshot() as TradingSnapshotWithAutomation
   );
-  const [now, setNow] = useState(() => Date.now());
+  const [hydrated, setHydrated] = useState(false);
+  const [now, setNow] = useState(0);
   const [apiConnected, setApiConnected] = useState(false);
+  const [coinbase, setCoinbase] = useState<CoinbaseConnectionStatus | null>(
+    null
+  );
+  const [coinbaseBusy, setCoinbaseBusy] = useState(false);
+  const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null);
+  const [candles, setCandles] = useState<CoinbaseCandle[]>([]);
+  const [orderBook, setOrderBook] = useState<CoinbaseOrderBook | null>(null);
+  const [marketBusy, setMarketBusy] = useState(false);
+  const [marketError, setMarketError] = useState<string | null>(null);
+  const buildId = "iam-live-2026-10-15";
 
   const history = useMemo(() => settledFills(snapshot.trades), [snapshot.trades]);
   const activity = useMemo(
@@ -91,9 +112,97 @@ export default function TradingDashboard() {
     await persist(cleanBootstrap());
   }, [applySnapshot, persist]);
 
+  const testCoinbase = useCallback(async () => {
+    setCoinbaseBusy(true);
+    try {
+      const urls = [
+        `/api/coinbase?products=${encodeURIComponent(ACTIVE_MARKET)},ETH-USD,BTC-USD`,
+        `http://127.0.0.1:8000/api/coinbase?products=${encodeURIComponent(ACTIVE_MARKET)},ETH-USD,BTC-USD`,
+      ];
+      let data: CoinbaseConnectionStatus | null = null;
+      for (const url of urls) {
+        try {
+          const res = await fetch(url, { cache: "no-store" });
+          if (!res.ok) continue;
+          data = (await res.json()) as CoinbaseConnectionStatus;
+          break;
+        } catch {
+          /* try next */
+        }
+      }
+      if (!data) throw new Error("No Coinbase endpoint responded");
+      setCoinbase(data);
+      setLastRefreshAt(Date.now());
+    } catch (err) {
+      setCoinbase({
+        ok: false,
+        connected: false,
+        service: "coinbase",
+        message: "Coinbase request failed",
+        checkedAt: new Date().toISOString(),
+        latencyMs: 0,
+        products: [],
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setCoinbaseBusy(false);
+    }
+  }, []);
+
+  const loadMarketCharts = useCallback(async () => {
+    setMarketBusy(true);
+    setMarketError(null);
+    const urls = [
+      `/api/coinbase/market?product=${encodeURIComponent(ACTIVE_MARKET)}`,
+      `http://127.0.0.1:8000/api/coinbase/market?product=${encodeURIComponent(ACTIVE_MARKET)}`,
+    ];
+    try {
+      let payload: {
+        ok?: boolean;
+        candles?: CoinbaseCandle[];
+        book?: CoinbaseOrderBook | null;
+        error?: string;
+      } | null = null;
+      for (const url of urls) {
+        try {
+          const res = await fetch(url, { cache: "no-store" });
+          if (!res.ok) continue;
+          payload = await res.json();
+          break;
+        } catch {
+          /* try next */
+        }
+      }
+      if (!payload?.ok) {
+        throw new Error(payload?.error || "Market data unavailable");
+      }
+      setCandles(payload.candles ?? []);
+      setOrderBook(payload.book ?? null);
+      setLastRefreshAt(Date.now());
+    } catch (err) {
+      setMarketError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMarketBusy(false);
+    }
+  }, []);
+
   useEffect(() => {
+    setNow(Date.now());
+    setSnapshot(loadSnapshot());
+    setHydrated(true);
     void loadFromApi();
-  }, [loadFromApi]);
+    void testCoinbase();
+    void loadMarketCharts();
+  }, [loadFromApi, testCoinbase, loadMarketCharts]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const id = window.setInterval(() => {
+      void testCoinbase();
+      void loadMarketCharts();
+    }, 8_000);
+    return () => window.clearInterval(id);
+  }, [hydrated, testCoinbase, loadMarketCharts]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -119,6 +228,7 @@ export default function TradingDashboard() {
   }, [persist, snapshot]);
 
   useEffect(() => {
+    if (!hydrated) return;
     const tick = async () => {
       setNow(Date.now());
       if (apiConnected) {
@@ -126,18 +236,18 @@ export default function TradingDashboard() {
         return;
       }
       setSnapshot((current) => {
-        const hydrated = hydrateSnapshot(current);
-        if (JSON.stringify(hydrated) !== JSON.stringify(current)) {
-          saveSnapshot(hydrated);
+        const next = hydrateSnapshot(current);
+        if (JSON.stringify(next) !== JSON.stringify(current)) {
+          saveSnapshot(next);
         }
-        return hydrated;
+        return next;
       });
     };
     void tick();
     const pollMs = snapshot.executionState === "running" ? 5_000 : 10_000;
     const id = window.setInterval(() => void tick(), pollMs);
     return () => window.clearInterval(id);
-  }, [snapshot.executionState, apiConnected, loadFromApi]);
+  }, [hydrated, snapshot.executionState, apiConnected, loadFromApi]);
 
   const realizedTotal = useMemo(
     () => totalRealizedPnL(snapshot.trades),
@@ -156,16 +266,36 @@ export default function TradingDashboard() {
     [snapshot.executionState, snapshot.trades, pending, now]
   );
 
+  const liveXrp = coinbase?.products?.find((p) => p.symbol === ACTIVE_MARKET);
+
   return (
     <main>
       <p className="app-id">
-        Kalici · {ACTIVE_MARKET} · local execution
+        Kalici · {ACTIVE_MARKET} · {buildId}
         {apiConnected ? " · ledger API connected" : " · local browser ledger"}
+        {coinbase?.connected ? " · Coinbase LIVE" : " · Coinbase offline"}
       </p>
       <h1>Trading</h1>
       <p className="subtitle">
-        Live <strong>{ACTIVE_MARKET}</strong> MARKET orders when execution is
-        ONLINE. Source: <strong>local</strong>.
+        Live <strong>{ACTIVE_MARKET}</strong>
+        {liveXrp ? (
+          <>
+            {" "}
+            spot <strong className="mono">${liveXrp.price.toFixed(4)}</strong>
+          </>
+        ) : null}
+        . Prices refresh every 8s. Last update:{" "}
+        <strong suppressHydrationWarning>
+          {hydrated && lastRefreshAt
+            ? new Date(lastRefreshAt).toLocaleTimeString("en-GB", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: false,
+              })
+            : "—"}
+        </strong>
+        .
       </p>
 
       <div className="toolbar">
@@ -177,10 +307,82 @@ export default function TradingDashboard() {
         <button type="button" className="danger" onClick={() => void cleanRestart()}>
           Clean restart
         </button>
-        <button type="button" onClick={() => void loadFromApi()}>
-          Refresh ledger
+        <button
+          type="button"
+          onClick={() => {
+            void loadFromApi();
+            void testCoinbase();
+            void loadMarketCharts();
+          }}
+        >
+          Refresh all
+        </button>
+        <button
+          type="button"
+          onClick={() => void testCoinbase()}
+          disabled={coinbaseBusy}
+        >
+          {coinbaseBusy ? "Testing Coinbase…" : "Test Coinbase"}
         </button>
       </div>
+
+      <section>
+        <h2>Coinbase connection</h2>
+        <div
+          className={`card coinbase-status ${
+            coinbase?.connected ? "coinbase-ok" : "coinbase-fail"
+          }`}
+        >
+          <div className="coinbase-row">
+            <strong>
+              {coinbase == null
+                ? "Checking…"
+                : coinbase.connected
+                  ? "CONNECTED"
+                  : "NOT CONNECTED"}
+            </strong>
+            <span className="meta">
+              {coinbase?.latencyMs != null ? `${coinbase.latencyMs} ms` : "—"}
+            </span>
+          </div>
+          <p className="meta" style={{ margin: "0.35rem 0 0" }}>
+            {coinbase?.message ?? "Contacting Coinbase Exchange…"}
+          </p>
+          {coinbase?.error ? (
+            <p className="hint" style={{ color: "var(--red)" }}>
+              {coinbase.error}
+            </p>
+          ) : null}
+          {coinbase?.products?.length ? (
+            <ul className="coinbase-prices">
+              {coinbase.products.map((p) => (
+                <li key={p.symbol}>
+                  <span>{p.symbol}</span>
+                  <span className="mono">
+                    ${p.price.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+                  </span>
+                  <span className="meta">{p.source}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="charts-grid">
+        <TradingChart
+          symbol={ACTIVE_MARKET}
+          candles={candles}
+          loading={marketBusy && candles.length === 0}
+          error={marketError}
+        />
+        <DepthChart
+          symbol={ACTIVE_MARKET}
+          book={orderBook}
+          loading={marketBusy && !orderBook}
+          error={marketError}
+        />
+      </section>
 
       <div
         className={`execution-banner ${execStatus.isOnline ? "running" : "paused"}`}
@@ -253,6 +455,11 @@ export default function TradingDashboard() {
           ))}
         </section>
       )}
+
+      <TickerBanner
+        positions={snapshot.openPositions}
+        coinbaseProducts={coinbase?.products ?? []}
+      />
     </main>
   );
 }

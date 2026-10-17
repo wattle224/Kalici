@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import type { CoinbaseTicker } from "@/lib/coinbase";
 import {
   buildMarketTickers,
   formatChangePct,
@@ -12,6 +13,7 @@ import type { OpenPosition } from "@/lib/trading";
 
 interface TickerBannerProps {
   positions: OpenPosition[];
+  coinbaseProducts?: CoinbaseTicker[];
   highlightGainersOnly?: boolean;
 }
 
@@ -21,31 +23,44 @@ function TickerItem({ item }: { item: MarketTicker }) {
     <span className="ticker-item">
       <strong>{item.symbol}</strong>
       <span className="ticker-price">{formatPrice(item.price, item.symbol)}</span>
-      <span className={up ? "pnl-positive" : "pnl-negative"}>
-        {formatChangePct(item.change24hPct)}
-      </span>
+      {Number.isFinite(item.change24hPct) ? (
+        <span className={up ? "pnl-positive" : "pnl-negative"}>
+          {formatChangePct(item.change24hPct)}
+        </span>
+      ) : (
+        <span className="meta">live</span>
+      )}
     </span>
   );
 }
 
 export default function TickerBanner({
   positions,
+  coinbaseProducts = [],
   highlightGainersOnly = false,
 }: TickerBannerProps) {
   const items = useMemo(() => {
-    const tickers = buildMarketTickers(positions);
-    return highlightGainersOnly ? gainers(tickers) : tickers;
-  }, [positions, highlightGainersOnly]);
+    const fromCoinbase: MarketTicker[] = coinbaseProducts.map((p) => ({
+      symbol: p.symbol,
+      price: p.price,
+      change24hPct: Number.NaN,
+    }));
+    const tickers =
+      fromCoinbase.length > 0
+        ? fromCoinbase
+        : buildMarketTickers(positions);
+    return highlightGainersOnly ? gainers(tickers.filter((t) => Number.isFinite(t.change24hPct))) : tickers;
+  }, [positions, coinbaseProducts, highlightGainersOnly]);
 
   if (items.length === 0) {
     return (
       <footer className="ticker-bar" aria-label="Market ticker">
-        <span className="ticker-empty">No gainers to display</span>
+        <span className="ticker-empty">Waiting for Coinbase prices…</span>
       </footer>
     );
   }
 
-  const label = highlightGainersOnly ? "GAINERS" : "MARKETS";
+  const label = coinbaseProducts.length > 0 ? "COINBASE LIVE" : highlightGainersOnly ? "GAINERS" : "MARKETS";
 
   return (
     <footer className="ticker-bar" aria-label="Market ticker">
