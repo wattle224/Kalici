@@ -1,15 +1,23 @@
-# Investment Management
+# Investment Management — QuantEdge Terminal
 
 **One app. One shortcut. One URL.**
 
 | | |
 |---|---|
-| **Start** | Double-click **`Investment-Management.bat`** |
+| **Start** | Double-click **`Investment-Management.bat`** or **`INSTALL.bat`** |
 | **Desktop** | Shortcut named **Investment Management** |
-| **Open** | http://127.0.0.1:3000/ |
+| **Front end** | **QuantEdge Terminal** → http://127.0.0.1:3000/ |
 | **API** | http://127.0.0.1:8000/health |
+| **Legacy UI** | http://127.0.0.1:3000/legacy |
 
 Keep the two black windows open while you use the app.
+
+### QuantEdge workspaces
+1. Trading & Analysis (Coinbase live crypto charts + simulated multi-asset order ticket)
+2. Technical Support & Monitoring (simulated SRE/ops console)
+3. Risk & Regime Analysis (illustrative risk / regime UI)
+
+See `web/README.md` for live vs simulated data boundaries.
 
 ---
 
