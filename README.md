@@ -27,7 +27,7 @@ See `web/README.md` for live vs simulated data boundaries.
 
 ```powershell
 $bat = Join-Path $env:TEMP 'INSTALL-Investment-Management.bat'
-Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/cursor/iam-full-audit-ae22/INSTALL.bat' -OutFile $bat
+Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/cursor/quantedge-terminal-ae22/INSTALL.bat' -OutFile $bat
 cmd /c $bat
 ```
 
