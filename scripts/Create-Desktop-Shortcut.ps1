@@ -89,7 +89,7 @@ foreach ($Desktop in $desks) {
     $lnk = $shell.CreateShortcut($lnkPath)
     $lnk.TargetPath = $PrimaryLauncher
     $lnk.WorkingDirectory = Split-Path -Parent $PrimaryLauncher
-    $lnk.Description = "Investment Management — QuantEdge Terminal"
+    $lnk.Description = "Investment Management - QuantEdge Terminal"
     $lnk.IconLocation = "$env:SystemRoot\System32\imageres.dll,109"
     $lnk.Save()
     Write-Host "VALID: $lnkPath -> $($lnk.TargetPath)"

@@ -1,5 +1,6 @@
 # Fill Desktop\Investment Management from GitHub and create the shortcut.
 # Safe to re-run when the folder is empty or incomplete.
+# ASCII-only: Windows PowerShell 5.x mis-parses UTF-8 em-dashes without BOM.
 $ErrorActionPreference = "Stop"
 
 $dest = Join-Path $env:USERPROFILE "Desktop\Investment Management"
@@ -58,9 +59,9 @@ if (-not (Test-Path $launcher)) {
   $alt = Join-Path $dest "iam-standalone\RUN-IAM.bat"
   if (Test-Path $alt) { Copy-Item $alt $launcher -Force }
 }
-if (-not (Test-Path $launcher)) { throw "Install incomplete — Investment-Management.bat missing in $dest" }
+if (-not (Test-Path $launcher)) { throw "Install incomplete - Investment-Management.bat missing in $dest" }
 if (-not (Test-Path (Join-Path $dest "backend\server.mjs")) -and -not (Test-Path (Join-Path $dest "iam-standalone\server.js"))) {
-  throw "Install incomplete — no Node ledger server in $dest"
+  throw "Install incomplete - no Node ledger server in $dest"
 }
 Write-Host "  [OK] $launcher"
 
@@ -92,7 +93,7 @@ foreach ($d in $desks) {
   $s = $shell.CreateShortcut($lnkPath)
   $s.TargetPath = $launcher
   $s.WorkingDirectory = $dest
-  $s.Description = "Investment Management — QuantEdge Terminal"
+  $s.Description = "Investment Management - QuantEdge Terminal"
   $s.IconLocation = "$env:SystemRoot\System32\imageres.dll,109"
   $s.Save()
   Write-Host "  [OK] $lnkPath"
