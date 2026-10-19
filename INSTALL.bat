@@ -86,52 +86,66 @@ if not exist "%DEST%" mkdir "%DEST%"
 set "SRC=%~dp0"
 if "%SRC:~-1%"=="\" set "SRC=%SRC:~0,-1%"
 
-REM If this INSTALL.bat was downloaded alone, pull the repo zip
-if not exist "%SRC%\Investment-Management.bat" if not exist "%SRC%\backend\server.mjs" if not exist "%SRC%\iam-standalone\server.js" (
-  echo  Downloading app from GitHub...
-  set "ZIP=%TEMP%\kalici-im-install.zip"
-  set "EXTRACT=%TEMP%\kalici-im-extract"
-  if exist "%EXTRACT%" rmdir /s /q "%EXTRACT%" 2>nul
+REM Prefer the dedicated PowerShell installer (handles empty DEST reliably)
+if exist "%SRC%\scripts\Install-To-Desktop.ps1" (
+  echo  Using scripts\Install-To-Desktop.ps1 ...
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%SRC%\scripts\Install-To-Desktop.ps1"
+  exit /b %ERRORLEVEL%
+)
+
+REM If this INSTALL.bat was downloaded alone (no scripts\), pull the repo zip
+set "NEED_DOWNLOAD=0"
+if not exist "%SRC%\Investment-Management.bat" set "NEED_DOWNLOAD=1"
+if not exist "%SRC%\backend\server.mjs" if not exist "%SRC%\iam-standalone\server.js" set "NEED_DOWNLOAD=1"
+if exist "%DEST%\Investment-Management.bat" if exist "%DEST%\backend\server.mjs" set "NEED_DOWNLOAD=0"
+if "%NEED_DOWNLOAD%"=="1" if not exist "%SRC%\Investment-Management.bat" (
+  echo  Downloading app from GitHub into empty/incomplete Desktop folder...
   powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "$ErrorActionPreference='Stop';" ^
+    "$dest='%DEST%'; $zip=Join-Path $env:TEMP 'kalici-im-install.zip'; $extract=Join-Path $env:TEMP 'kalici-im-extract';" ^
     "$urls=@(" ^
     "  'https://github.com/wattle224/Kalici/archive/refs/heads/cursor/fix-onedrive-shortcut-ae22.zip'," ^
     "  'https://github.com/wattle224/Kalici/archive/refs/heads/cursor/quantedge-terminal-ae22.zip'," ^
     "  'https://github.com/wattle224/Kalici/archive/refs/heads/cursor/iam-full-audit-ae22.zip'," ^
     "  'https://github.com/wattle224/Kalici/archive/refs/heads/main.zip'" ^
     ");" ^
-    "$ok=$false;" ^
-    "foreach ($u in $urls) {" ^
-    "  try {" ^
-    "    Invoke-WebRequest -Uri $u -OutFile '%ZIP%';" ^
-    "    if ((Get-Item '%ZIP%').Length -gt 10000) { $ok=$true; break }" ^
-    "  } catch {}" ^
-    "};" ^
+    "$ok=$false; foreach ($u in $urls) { try { Write-Host ('  try ' + $u); Invoke-WebRequest -Uri $u -OutFile $zip -UseBasicParsing; if ((Get-Item $zip).Length -gt 50000) { $ok=$true; break } } catch { Write-Host ('  ' + $_.Exception.Message) } };" ^
     "if (-not $ok) { throw 'Download failed' };" ^
-    "Expand-Archive -Path '%ZIP%' -DestinationPath '%EXTRACT%' -Force;" ^
-    "$folder=Get-ChildItem '%EXTRACT%' -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1;" ^
+    "if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }; Expand-Archive -Path $zip -DestinationPath $extract -Force;" ^
+    "$folder=Get-ChildItem $extract -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1;" ^
     "Write-Host ('  extracted ' + $folder.FullName);" ^
-    "Copy-Item -Path (Join-Path $folder.FullName '*') -Destination '%DEST%' -Recurse -Force"
+    "Get-ChildItem -LiteralPath $dest -Force -EA SilentlyContinue | Remove-Item -Recurse -Force -EA SilentlyContinue;" ^
+    "Copy-Item -Path (Join-Path $folder.FullName '*') -Destination $dest -Recurse -Force;" ^
+    "if (-not (Test-Path (Join-Path $dest 'Investment-Management.bat'))) { throw 'DEST still missing Investment-Management.bat' }"
   if errorlevel 1 (
     color 0C
     echo  Download failed. Check internet and try again.
     pause
     exit /b 1
   )
-) else (
-  echo  Copying from: %SRC%
-  robocopy "%SRC%" "%DEST%" /E /XD .git node_modules web\node_modules .next ATLAS.xcodeproj scripts\__pycache__ /NFL /NDL /NJH /NJS /nc /ns /np >nul
-  if exist "%SRC%\web" robocopy "%SRC%\web" "%DEST%\web" /E /XD node_modules .next /NFL /NDL /NJH /NJS /nc /ns /np >nul
-  if exist "%SRC%\backend" robocopy "%SRC%\backend" "%DEST%\backend" /E /NFL /NDL /NJH /NJS /nc /ns /np >nul
-  if exist "%SRC%\iam-standalone" robocopy "%SRC%\iam-standalone" "%DEST%\iam-standalone" /E /NFL /NDL /NJH /NJS /nc /ns /np >nul
-  if exist "%SRC%\scripts" robocopy "%SRC%\scripts" "%DEST%\scripts" /E /XD __pycache__ /NFL /NDL /NJH /NJS /nc /ns /np >nul
-  copy /Y "%SRC%\Investment-Management.bat" "%DEST%\Investment-Management.bat" >nul 2>nul
-  copy /Y "%SRC%\INSTALL.bat" "%DEST%\INSTALL.bat" >nul 2>nul
-  copy /Y "%SRC%\FIX-WRONG-SHORTCUT.bat" "%DEST%\FIX-WRONG-SHORTCUT.bat" >nul 2>nul
-  copy /Y "%SRC%\package.json" "%DEST%\package.json" >nul 2>nul
-  copy /Y "%SRC%\README.md" "%DEST%\README.md" >nul 2>nul
+  goto after_copy
 )
 
+if not exist "%SRC%\Investment-Management.bat" if not exist "%SRC%\backend\server.mjs" if not exist "%SRC%\iam-standalone\server.js" (
+  color 0C
+  echo  No app source next to INSTALL.bat and download was skipped unexpectedly.
+  pause
+  exit /b 1
+)
+
+echo  Copying from: %SRC%
+robocopy "%SRC%" "%DEST%" /E /XD .git node_modules web\node_modules .next ATLAS.xcodeproj scripts\__pycache__ /NFL /NDL /NJH /NJS /nc /ns /np >nul
+if exist "%SRC%\web" robocopy "%SRC%\web" "%DEST%\web" /E /XD node_modules .next /NFL /NDL /NJH /NJS /nc /ns /np >nul
+if exist "%SRC%\backend" robocopy "%SRC%\backend" "%DEST%\backend" /E /NFL /NDL /NJH /NJS /nc /ns /np >nul
+if exist "%SRC%\iam-standalone" robocopy "%SRC%\iam-standalone" "%DEST%\iam-standalone" /E /NFL /NDL /NJH /NJS /nc /ns /np >nul
+if exist "%SRC%\scripts" robocopy "%SRC%\scripts" "%DEST%\scripts" /E /XD __pycache__ /NFL /NDL /NJH /NJS /nc /ns /np >nul
+copy /Y "%SRC%\Investment-Management.bat" "%DEST%\Investment-Management.bat" >nul 2>nul
+copy /Y "%SRC%\INSTALL.bat" "%DEST%\INSTALL.bat" >nul 2>nul
+copy /Y "%SRC%\FIX-WRONG-SHORTCUT.bat" "%DEST%\FIX-WRONG-SHORTCUT.bat" >nul 2>nul
+copy /Y "%SRC%\package.json" "%DEST%\package.json" >nul 2>nul
+copy /Y "%SRC%\README.md" "%DEST%\README.md" >nul 2>nul
+
+:after_copy
 if not exist "%DEST%\Investment-Management.bat" (
   if exist "%DEST%\iam-standalone\RUN-IAM.bat" (
     copy /Y "%DEST%\iam-standalone\RUN-IAM.bat" "%DEST%\Investment-Management.bat" >nul

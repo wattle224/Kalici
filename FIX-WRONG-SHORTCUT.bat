@@ -99,21 +99,17 @@ if exist "%OLDPROJ%\backend\app\main.py" (
 echo.
 echo  [4/5] Ensuring Kalici app at: %DEST%
 if not exist "%DEST%\Investment-Management.bat" (
-  echo  App folder missing — downloading INSTALL...
-  set "IBAT=%TEMP%\INSTALL-Investment-Management.bat"
+  echo  App folder empty/missing — downloading full install script...
+  set "IPS1=%TEMP%\Install-To-Desktop.ps1"
   powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/cursor/fix-onedrive-shortcut-ae22/INSTALL.bat' -OutFile '%IBAT%'"
-  if errorlevel 1 (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-      "Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/cursor/quantedge-terminal-ae22/INSTALL.bat' -OutFile '%IBAT%'"
-  )
-  if not exist "%IBAT%" (
+    "Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/cursor/fix-onedrive-shortcut-ae22/scripts/Install-To-Desktop.ps1' -OutFile '%IPS1%'"
+  if not exist "%IPS1%" (
     color 0C
-    echo  Could not download INSTALL.bat. Check internet.
+    echo  Could not download Install-To-Desktop.ps1. Check internet.
     pause
     exit /b 1
   )
-  call "%IBAT%"
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%IPS1%"
   exit /b %ERRORLEVEL%
 )
 

@@ -29,7 +29,15 @@ That error means the **OneDrive Desktop shortcut still starts the old Python app
 
 Not Kalici / QuantEdge. Port **8000** is already taken (or the old launcher fights itself), so FastAPI dies and the browser never opens the real app.
 
-**PowerShell fix (copy/paste all of it):**
+**If `Desktop\Investment Management` is empty** (or incomplete), paste this in PowerShell — it downloads the full app into that folder, creates the shortcut, and starts QuantEdge:
+
+```powershell
+$ps1 = Join-Path $env:TEMP 'Install-To-Desktop.ps1'
+Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/cursor/fix-onedrive-shortcut-ae22/scripts/Install-To-Desktop.ps1' -OutFile $ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File $ps1
+```
+
+**Shortcut / port conflict only** (folder already has files):
 
 ```powershell
 $bat = Join-Path $env:TEMP 'FIX-WRONG-SHORTCUT.bat'
@@ -37,7 +45,7 @@ Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/cursor/fix-onedr
 cmd /c $bat
 ```
 
-That will free ports 8000/3000, remove the bad OneDrive/Desktop shortcuts, disable the old `projects\` launcher, install/start **Desktop\Investment Management**, and open http://127.0.0.1:3000/
+After a successful install the folder must contain `Investment-Management.bat`, `backend\`, `web\`, etc. — not be empty.
 
 Afterward, right-click **Investment Management.lnk** → Properties → Target must be:
 
