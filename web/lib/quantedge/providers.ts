@@ -1,4 +1,4 @@
-import type { Candle, OrderBook, Quote } from "./types";
+import type { Candle, Instrument, OrderBook, Quote } from "./types";
 import { ACTIVE_MARKET } from "@/lib/symbols";
 
 export interface MarketProvider {
@@ -7,6 +7,7 @@ export interface MarketProvider {
   fetchQuotes(symbols: string[]): Promise<Quote[]>;
   fetchCandles(symbol: string, granularitySec?: number): Promise<Candle[]>;
   fetchOrderBook(symbol: string): Promise<OrderBook | null>;
+  fetchProducts(): Promise<Instrument[]>;
   searchCoverageNote: string;
 }
 
@@ -27,43 +28,72 @@ export const coinbaseLedgerProvider: MarketProvider = {
   id: "coinbase+ledger",
   label: "Coinbase Exchange (public) + IAM Ledger",
   searchCoverageNote:
-    "Live candles/depth for Coinbase crypto products. Equities/FX/futures in the universe are simulated sample instruments until a licensed market-data vendor is connected.",
-  async fetchQuotes(symbols) {
-    const data = (await tryJson([
-      `/api/coinbase?products=${encodeURIComponent(symbols.join(","))}`,
-      `http://127.0.0.1:8000/api/coinbase?products=${encodeURIComponent(symbols.join(","))}`,
-    ])) as {
-      products?: { symbol: string; price: number; bid: number | null; ask: number | null; time: string | null; volume: number | null }[];
-      connected?: boolean;
+    "Live candles/depth for Coinbase USD crypto products (full Exchange catalog via dropdown). Equities/FX/futures remain simulated sample instruments until a licensed vendor is connected.",
+  async fetchProducts() {
+    const data = (await tryJson(["/api/coinbase/products"])) as {
+      products?: {
+        id: string;
+        displayName: string;
+        baseCurrency: string;
+        quoteCurrency: string;
+      }[];
     } | null;
-
     if (!data?.products?.length) return [];
-    return data.products.map((p) => {
-      // Without prior close, treat small synthetic change as unknown → show 0 until extended
-      return {
-        symbol: p.symbol,
-        last: p.price,
-        bid: p.bid ?? undefined,
-        ask: p.ask ?? undefined,
-        change: 0,
-        changePct: 0,
-        volume: p.volume ?? undefined,
-        timestamp: p.time ?? new Date().toISOString(),
-        freshness: "live" as const,
-      };
-    });
+    return data.products.map((p) => ({
+      id: `cb-${p.id.toLowerCase()}`,
+      symbol: p.id,
+      name: p.displayName || `${p.baseCurrency} / ${p.quoteCurrency}`,
+      exchange: "Coinbase",
+      assetClass: "crypto" as const,
+      currency: p.quoteCurrency || "USD",
+      providerId: p.id,
+    }));
+  },
+  async fetchQuotes(symbols) {
+    if (!symbols.length) return [];
+    // Coinbase ticker endpoint is per-product; batch via our API in chunks
+    const chunkSize = 12;
+    const out: Quote[] = [];
+    for (let i = 0; i < symbols.length; i += chunkSize) {
+      const chunk = symbols.slice(i, i + chunkSize);
+      const data = (await tryJson([
+        `/api/coinbase?products=${encodeURIComponent(chunk.join(","))}`,
+      ])) as {
+        products?: {
+          symbol: string;
+          price: number;
+          bid: number | null;
+          ask: number | null;
+          time: string | null;
+          volume: number | null;
+        }[];
+      } | null;
+      if (!data?.products?.length) continue;
+      for (const p of data.products) {
+        out.push({
+          symbol: p.symbol,
+          last: p.price,
+          bid: p.bid ?? undefined,
+          ask: p.ask ?? undefined,
+          change: 0,
+          changePct: 0,
+          volume: p.volume ?? undefined,
+          timestamp: p.time ?? new Date().toISOString(),
+          freshness: "live",
+        });
+      }
+    }
+    return out;
   },
   async fetchCandles(symbol, granularitySec = 3600) {
     const data = (await tryJson([
-      `/api/coinbase/market?product=${encodeURIComponent(symbol)}&granularity=${granularitySec}`,
-      `http://127.0.0.1:8000/api/coinbase/market?product=${encodeURIComponent(symbol)}&granularity=${granularitySec}`,
-    ])) as { candles?: Candle[]; ok?: boolean } | null;
+      `/api/coinbase/market?product=${encodeURIComponent(symbol)}&granularity=${granularitySec}&limit=168`,
+    ])) as { candles?: Candle[]; ok?: boolean; error?: string } | null;
     return data?.candles ?? [];
   },
   async fetchOrderBook(symbol) {
     const data = (await tryJson([
-      `/api/coinbase/market?product=${encodeURIComponent(symbol)}`,
-      `http://127.0.0.1:8000/api/coinbase/market?product=${encodeURIComponent(symbol)}`,
+      `/api/coinbase/market?product=${encodeURIComponent(symbol)}&depth=20`,
     ])) as {
       book?: {
         bids: { price: number; size: number }[];

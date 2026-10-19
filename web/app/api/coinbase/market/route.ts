@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const product = (url.searchParams.get("product") || ACTIVE_MARKET).toUpperCase();
   const granularity = Number(url.searchParams.get("granularity") || 3600);
-  const candleLimit = Number(url.searchParams.get("limit") || 48);
+  const candleLimit = Number(url.searchParams.get("limit") || 168);
   const depthLevels = Number(url.searchParams.get("depth") || 20);
 
   try {

@@ -48,3 +48,14 @@ See `lib/quantedge/providers.ts` and `lib/quantedge/types.ts`. Swap market-data 
 ## Keyboard
 
 - `Ctrl/Cmd+K` — command palette (instruments + workspaces)
+
+## QuantEdge UI notes
+
+- **Security dropdown** loads the Coinbase Exchange USD product catalog via `/api/coinbase/products`.
+- **Charts / depth** load from `/api/coinbase/market` (live public Exchange API).
+- **Support → Fix with Cursor** builds a Cloud Agent prompt, copies it, opens https://cursor.com/agents, then applies pasted replies as dry-run checklist/status updates.
+- **Risk → Run analysis tool** uses the local QuantEdge analyzer on live candles; set `GEMINI_API_KEY` (Google AI Studio free tier) for optional Gemini narrative.
+
+## Optional env
+
+See `.env.example` for `GEMINI_API_KEY` / `GOOGLE_AI_API_KEY` (server-side only).

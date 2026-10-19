@@ -146,11 +146,56 @@ export interface CoinbaseOrderBook {
   spread: number | null;
 }
 
+export interface CoinbaseProduct {
+  id: string;
+  displayName: string;
+  baseCurrency: string;
+  quoteCurrency: string;
+  status: string;
+  tradingDisabled: boolean;
+}
+
+/** Public product catalog (USD-quoted spot crypto on Exchange). */
+export async function listCoinbaseUsdProducts(): Promise<CoinbaseProduct[]> {
+  const raw = (await fetchJson(`${COINBASE_EXCHANGE_BASE}/products`, 15_000)) as
+    | Record<string, unknown>[]
+    | unknown;
+
+  if (!Array.isArray(raw)) throw new Error("Invalid products response");
+
+  const out: CoinbaseProduct[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const id = typeof r.id === "string" ? r.id.toUpperCase() : "";
+    const quote = typeof r.quote_currency === "string" ? r.quote_currency.toUpperCase() : "";
+    const base = typeof r.base_currency === "string" ? r.base_currency.toUpperCase() : "";
+    const status = typeof r.status === "string" ? r.status : "";
+    const tradingDisabled = Boolean(r.trading_disabled);
+    if (!id || quote !== "USD") continue;
+    if (status && status !== "online") continue;
+    if (tradingDisabled) continue;
+    out.push({
+      id,
+      displayName:
+        typeof r.display_name === "string" && r.display_name
+          ? r.display_name
+          : `${base} / ${quote}`,
+      baseCurrency: base,
+      quoteCurrency: quote,
+      status: status || "online",
+      tradingDisabled,
+    });
+  }
+
+  return out.sort((a, b) => a.id.localeCompare(b.id));
+}
+
 /** Historic candles: [time, low, high, open, close, volume] */
 export async function fetchCoinbaseCandles(
   productId: string,
   granularitySec = 3600,
-  limit = 48
+  limit = 168
 ): Promise<CoinbaseCandle[]> {
   const raw = (await fetchJson(
     `${COINBASE_EXCHANGE_BASE}/products/${encodeURIComponent(productId)}/candles?granularity=${granularitySec}`

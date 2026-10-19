@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { INSTRUMENTS } from "@/lib/quantedge/sampleData";
 import { useTerminal } from "@/lib/quantedge/TerminalContext";
 import CandleChart from "./CandleChart";
 import { Badge, Button, Field, FreshnessBadge, Input, Panel, PnL, Select } from "./ui";
@@ -12,8 +11,12 @@ export default function TradingWorkspace() {
     selected,
     selectSymbol,
     search,
+    instruments,
+    coinbaseProductsLoaded,
     quoteMap,
     candles,
+    chartStatus,
+    chartError,
     book,
     watchlists,
     activeWatchlistId,
@@ -22,22 +25,34 @@ export default function TradingWorkspace() {
     placeSimulatedOrder,
     cancelOrder,
     providerNote,
+    refreshMarket,
   } = useTerminal();
 
   const quote = quoteMap.get(selected.symbol);
   const wl = watchlists.find((w) => w.id === activeWatchlistId) ?? watchlists[0];
 
+  const cryptoInstruments = useMemo(
+    () => instruments.filter((i) => i.assetClass === "crypto"),
+    [instruments]
+  );
+
   const filteredInstruments = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return INSTRUMENTS;
-    return INSTRUMENTS.filter(
-      (i) =>
-        i.symbol.toLowerCase().includes(q) ||
-        i.name.toLowerCase().includes(q) ||
-        i.assetClass.includes(q) ||
-        (i.isin?.toLowerCase().includes(q) ?? false)
-    );
-  }, [search]);
+    const pool =
+      activeWatchlistId === "wl-crypto"
+        ? cryptoInstruments
+        : instruments.filter((i) => wl.symbols.includes(i.symbol) || i.assetClass !== "crypto");
+    if (!q) return pool.slice(0, 120);
+    return instruments
+      .filter(
+        (i) =>
+          i.symbol.toLowerCase().includes(q) ||
+          i.name.toLowerCase().includes(q) ||
+          i.assetClass.includes(q) ||
+          (i.isin?.toLowerCase().includes(q) ?? false)
+      )
+      .slice(0, 120);
+  }, [search, instruments, cryptoInstruments, wl, activeWatchlistId]);
 
   const [side, setSide] = useState<OrderSide>("buy");
   const [orderType, setOrderType] = useState<OrderType>("market");
@@ -68,9 +83,28 @@ export default function TradingWorkspace() {
   return (
     <div className="grid h-full min-h-0 grid-cols-12 gap-2 p-2">
       <aside className="col-span-12 flex min-h-0 flex-col gap-2 lg:col-span-2">
-        <Panel title="Security selector" className="max-h-64 lg:max-h-none lg:flex-1">
+        <Panel title="Security selector" className="max-h-[70vh] lg:max-h-none lg:flex-1">
           <p className="mb-2 text-[10px] text-qe-muted">{providerNote}</p>
-          <div className="mb-2 flex flex-wrap gap-1">
+
+          <Field label={`Coinbase USD products${coinbaseProductsLoaded ? ` (${cryptoInstruments.length})` : " (loading…)"}`}>
+            <Select
+              value={selected.assetClass === "crypto" ? selected.symbol : ""}
+              onChange={(e) => {
+                if (e.target.value) selectSymbol(e.target.value);
+              }}
+            >
+              <option value="" disabled>
+                Select Coinbase crypto…
+              </option>
+              {cryptoInstruments.map((ins) => (
+                <option key={ins.id} value={ins.symbol}>
+                  {ins.symbol} — {ins.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <div className="mb-2 mt-2 flex flex-wrap gap-1">
             {watchlists.map((w) => (
               <button
                 key={w.id}
@@ -86,34 +120,32 @@ export default function TradingWorkspace() {
               </button>
             ))}
           </div>
-          <ul className="space-y-1">
-            {(search ? filteredInstruments : INSTRUMENTS.filter((i) => wl.symbols.includes(i.symbol))).map(
-              (ins) => {
-                const q = quoteMap.get(ins.symbol);
-                return (
-                  <li key={ins.id}>
-                    <button
-                      type="button"
-                      onClick={() => selectSymbol(ins.symbol)}
-                      className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs hover:bg-qe-elevated ${
-                        selected.symbol === ins.symbol ? "bg-qe-elevated" : ""
-                      }`}
-                    >
-                      <span>
-                        <span className="font-mono font-semibold text-qe-text">{ins.symbol}</span>
-                        <span className="mt-0.5 block text-[10px] text-qe-muted">{ins.name}</span>
+          <ul className="max-h-[42vh] space-y-1 overflow-auto">
+            {filteredInstruments.map((ins) => {
+              const q = quoteMap.get(ins.symbol);
+              return (
+                <li key={ins.id}>
+                  <button
+                    type="button"
+                    onClick={() => selectSymbol(ins.symbol)}
+                    className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs hover:bg-qe-elevated ${
+                      selected.symbol === ins.symbol ? "bg-qe-elevated" : ""
+                    }`}
+                  >
+                    <span>
+                      <span className="font-mono font-semibold text-qe-text">{ins.symbol}</span>
+                      <span className="mt-0.5 block text-[10px] text-qe-muted">{ins.name}</span>
+                    </span>
+                    <span className="text-right">
+                      <span className="block font-mono text-qe-text">
+                        {q?.last?.toLocaleString(undefined, { maximumFractionDigits: 4 }) ?? "—"}
                       </span>
-                      <span className="text-right">
-                        <span className="block font-mono text-qe-text">
-                          {q?.last?.toLocaleString(undefined, { maximumFractionDigits: 4 }) ?? "—"}
-                        </span>
-                        {q ? <PnL pct={q.changePct} /> : null}
-                      </span>
-                    </button>
-                  </li>
-                );
-              }
-            )}
+                      {q ? <PnL pct={q.changePct} /> : null}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </Panel>
       </aside>
@@ -133,35 +165,58 @@ export default function TradingWorkspace() {
                   {quote.bid} / {quote.ask}
                 </span>
               ) : null}
+              <Button onClick={() => void refreshMarket()}>Refresh</Button>
             </div>
           }
         >
-          <CandleChart candles={candles} symbol={selected.symbol} />
+          <CandleChart
+            candles={candles}
+            symbol={selected.symbol}
+            status={chartStatus}
+            error={chartError}
+          />
           <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-qe-muted md:grid-cols-4">
-            <div>Asset: <span className="text-qe-text">{selected.assetClass}</span></div>
-            <div>Exchange: <span className="text-qe-text">{selected.exchange}</span></div>
-            <div>CCY: <span className="text-qe-text">{selected.currency}</span></div>
-            <div>ISIN: <span className="text-qe-text">{selected.isin ?? "—"}</span></div>
+            <div>
+              Asset: <span className="text-qe-text">{selected.assetClass}</span>
+            </div>
+            <div>
+              Exchange: <span className="text-qe-text">{selected.exchange}</span>
+            </div>
+            <div>
+              CCY: <span className="text-qe-text">{selected.currency}</span>
+            </div>
+            <div>
+              Candles:{" "}
+              <span className="text-qe-text">
+                {candles.length} · {chartStatus}
+              </span>
+            </div>
           </div>
         </Panel>
 
         <div className="grid min-h-0 grid-cols-1 gap-2 md:grid-cols-2">
           <Panel title="Market analysis">
             <ul className="space-y-2 text-xs text-qe-text">
-              <li>Trend: {quote && quote.changePct >= 0 ? "Constructive (price vs session open proxy)" : "Soft (price vs session open proxy)"}</li>
-              <li>Momentum: RSI/MACD overlays available when vendor history is connected.</li>
-              <li>Volatility: ATR/Bollinger require continuous OHLC — live for Coinbase crypto candles.</li>
-              <li>Benchmark: relative performance vs SPY is illustrative until equity feed is live.</li>
+              <li>
+                Trend:{" "}
+                {quote && quote.changePct >= 0
+                  ? "Constructive (window return from live candles)"
+                  : "Soft (window return from live candles)"}
+              </li>
+              <li>
+                Depth: {book ? `live mid ${book.mid?.toFixed(4) ?? "—"}` : "unavailable for this product"}
+              </li>
               <li className="rounded border border-qe-border bg-qe-bg p-2 text-qe-muted">
-                <strong className="text-qe-amber">AI note (model interpretation):</strong> Summaries
-                distinguish facts (last, change), calculated fields (from candles), and model text.
-                No prediction is presented as certainty.
+                <strong className="text-qe-amber">AI note:</strong> Use Risk workspace Analyze for
+                local QuantEdge tool (+ optional Gemini). Predictions are never certainties.
               </li>
             </ul>
           </Panel>
           <Panel title="Depth / book">
             {!book ? (
-              <p className="text-xs text-qe-muted">Order book available for live Coinbase products only.</p>
+              <p className="text-xs text-qe-muted">
+                Order book available for live Coinbase products only.
+              </p>
             ) : (
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 <div>
@@ -193,13 +248,22 @@ export default function TradingWorkspace() {
       </div>
 
       <aside className="col-span-12 flex min-h-0 flex-col gap-2 lg:col-span-3">
-        <Panel
-          title="Order ticket"
-          right={<Badge tone="amber">Simulated</Badge>}
-        >
+        <Panel title="Order ticket" right={<Badge tone="amber">Simulated</Badge>}>
           <div className="mb-2 flex gap-1">
-            <Button variant={side === "buy" ? "buy" : "ghost"} className="flex-1" onClick={() => setSide("buy")}>Buy</Button>
-            <Button variant={side === "sell" ? "sell" : "ghost"} className="flex-1" onClick={() => setSide("sell")}>Sell</Button>
+            <Button
+              variant={side === "buy" ? "buy" : "ghost"}
+              className="flex-1"
+              onClick={() => setSide("buy")}
+            >
+              Buy
+            </Button>
+            <Button
+              variant={side === "sell" ? "sell" : "ghost"}
+              className="flex-1"
+              onClick={() => setSide("sell")}
+            >
+              Sell
+            </Button>
           </div>
           <div className="space-y-2">
             <Field label="Type">
@@ -228,14 +292,23 @@ export default function TradingWorkspace() {
             </Field>
             <div className="grid grid-cols-2 gap-2">
               <Field label="Stop-loss">
-                <Input value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} placeholder="Optional" />
+                <Input
+                  value={stopLoss}
+                  onChange={(e) => setStopLoss(e.target.value)}
+                  placeholder="Optional"
+                />
               </Field>
               <Field label="Take-profit">
-                <Input value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="Optional" />
+                <Input
+                  value={takeProfit}
+                  onChange={(e) => setTakeProfit(e.target.value)}
+                  placeholder="Optional"
+                />
               </Field>
             </div>
             <div className="rounded border border-qe-border bg-qe-bg p-2 text-[11px] text-qe-muted">
-              Est. value: <span className="font-mono text-qe-text">${estValue.toFixed(2)}</span>
+              Est. value:{" "}
+              <span className="font-mono text-qe-text">${estValue.toFixed(2)}</span>
               <div>Pre-trade check: simulated PASS (prototype).</div>
               <div className="text-qe-amber">Live brokerage submission is disabled.</div>
             </div>
@@ -249,10 +322,16 @@ export default function TradingWorkspace() {
                   Confirm {side.toUpperCase()} {qty} {selected.symbol} ({orderType}) — SIMULATED only
                 </p>
                 <div className="flex gap-2">
-                  <Button variant={side === "buy" ? "buy" : "sell"} className="flex-1" onClick={submit}>
+                  <Button
+                    variant={side === "buy" ? "buy" : "sell"}
+                    className="flex-1"
+                    onClick={submit}
+                  >
                     Confirm
                   </Button>
-                  <Button className="flex-1" onClick={() => setPreview(false)}>Cancel</Button>
+                  <Button className="flex-1" onClick={() => setPreview(false)}>
+                    Cancel
+                  </Button>
                 </div>
               </div>
             )}
@@ -282,7 +361,11 @@ export default function TradingWorkspace() {
                     <td>{o.status}</td>
                     <td>
                       {o.status === "open" ? (
-                        <button type="button" className="text-qe-amber" onClick={() => cancelOrder(o.id)}>
+                        <button
+                          type="button"
+                          className="text-qe-amber"
+                          onClick={() => cancelOrder(o.id)}
+                        >
                           Cancel
                         </button>
                       ) : null}

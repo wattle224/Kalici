@@ -13,7 +13,7 @@ import {
   buildSimulatedQuotes,
   buildWinnersLosers,
   DEFAULT_WATCHLISTS,
-  INSTRUMENTS,
+  INSTRUMENTS as SAMPLE_INSTRUMENTS,
 } from "./sampleData";
 import { coinbaseLedgerProvider, DEFAULT_SYMBOL } from "./providers";
 import type {
@@ -31,12 +31,16 @@ interface TerminalState {
   workspace: WorkspaceId;
   setWorkspace: (w: WorkspaceId) => void;
   selected: Instrument;
-  selectSymbol: (symbol: string) => void;
+  selectSymbol: (symbol: string, opts?: { stay?: boolean }) => void;
+  instruments: Instrument[];
+  coinbaseProductsLoaded: boolean;
   search: string;
   setSearch: (s: string) => void;
   quotes: Quote[];
   quoteMap: Map<string, Quote>;
   candles: Candle[];
+  chartStatus: "idle" | "loading" | "ready" | "empty" | "error";
+  chartError: string | null;
   book: OrderBook | null;
   watchlists: Watchlist[];
   activeWatchlistId: string;
@@ -48,7 +52,9 @@ interface TerminalState {
   dataAsOf: string | null;
   tickerFreshness: "live" | "mixed" | "simulated";
   orders: SimulatedOrder[];
-  placeSimulatedOrder: (order: Omit<SimulatedOrder, "id" | "createdAt" | "updatedAt" | "status" | "mode">) => void;
+  placeSimulatedOrder: (
+    order: Omit<SimulatedOrder, "id" | "createdAt" | "updatedAt" | "status" | "mode">
+  ) => void;
   cancelOrder: (id: string) => void;
   commandOpen: boolean;
   setCommandOpen: (v: boolean) => void;
@@ -64,82 +70,190 @@ export function useTerminal(): TerminalState {
   return ctx;
 }
 
-function findInstrument(symbol: string): Instrument {
-  return (
-    INSTRUMENTS.find((i) => i.symbol.toUpperCase() === symbol.toUpperCase()) ??
-    INSTRUMENTS[0]
-  );
+function mergeInstruments(base: Instrument[], coinbase: Instrument[]): Instrument[] {
+  const map = new Map<string, Instrument>();
+  for (const i of base) map.set(i.symbol.toUpperCase(), i);
+  for (const i of coinbase) map.set(i.symbol.toUpperCase(), i);
+  return [...map.values()].sort((a, b) => {
+    if (a.assetClass === "crypto" && b.assetClass !== "crypto") return -1;
+    if (a.assetClass !== "crypto" && b.assetClass === "crypto") return 1;
+    return a.symbol.localeCompare(b.symbol);
+  });
 }
 
 export function TerminalProvider({ children }: { children: ReactNode }) {
   const [workspace, setWorkspace] = useState<WorkspaceId>("trading");
-  const [selected, setSelected] = useState<Instrument>(() => findInstrument(DEFAULT_SYMBOL));
+  const [instruments, setInstruments] = useState<Instrument[]>(SAMPLE_INSTRUMENTS);
+  const [coinbaseProductsLoaded, setCoinbaseProductsLoaded] = useState(false);
+  const [selected, setSelected] = useState<Instrument>(
+    () => SAMPLE_INSTRUMENTS.find((i) => i.symbol === DEFAULT_SYMBOL) ?? SAMPLE_INSTRUMENTS[0]
+  );
   const [search, setSearch] = useState("");
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [candles, setCandles] = useState<Candle[]>([]);
+  const [chartStatus, setChartStatus] = useState<"idle" | "loading" | "ready" | "empty" | "error">(
+    "idle"
+  );
+  const [chartError, setChartError] = useState<string | null>(null);
   const [book, setBook] = useState<OrderBook | null>(null);
-  const [watchlists] = useState(DEFAULT_WATCHLISTS);
+  const [watchlists, setWatchlists] = useState(DEFAULT_WATCHLISTS);
   const [activeWatchlistId, setActiveWatchlistId] = useState(DEFAULT_WATCHLISTS[0].id);
-  const [feedStatus, setFeedStatus] = useState<"connected" | "degraded" | "disconnected">("disconnected");
+  const [feedStatus, setFeedStatus] = useState<"connected" | "degraded" | "disconnected">(
+    "disconnected"
+  );
   const [dataAsOf, setDataAsOf] = useState<string | null>(null);
   const [orders, setOrders] = useState<SimulatedOrder[]>([]);
   const [commandOpen, setCommandOpen] = useState(false);
 
-  const selectSymbol = useCallback((symbol: string) => {
-    setSelected(findInstrument(symbol));
-    setWorkspace("trading");
+  const findInstrument = useCallback(
+    (symbol: string): Instrument => {
+      const up = symbol.toUpperCase();
+      const hit = instruments.find((i) => i.symbol.toUpperCase() === up);
+      if (hit) return hit;
+      if (up.includes("-")) {
+        return {
+          id: `dyn-${up.toLowerCase()}`,
+          symbol: up,
+          name: up.replace("-", " / "),
+          exchange: "Coinbase",
+          assetClass: "crypto",
+          currency: up.split("-")[1] || "USD",
+          providerId: up,
+        };
+      }
+      return instruments[0] ?? SAMPLE_INSTRUMENTS[0];
+    },
+    [instruments]
+  );
+
+  const selectSymbol = useCallback(
+    (symbol: string, opts?: { stay?: boolean }) => {
+      setSelected(findInstrument(symbol));
+      if (!opts?.stay) setWorkspace("trading");
+    },
+    [findInstrument]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const products = await coinbaseLedgerProvider.fetchProducts();
+        if (cancelled || !products.length) return;
+        setInstruments((prev) => mergeInstruments(prev, products));
+        setCoinbaseProductsLoaded(true);
+        const cryptoIds = products.map((p) => p.symbol);
+        setWatchlists((prev) =>
+          prev.map((w) =>
+            w.id === "wl-crypto"
+              ? {
+                  ...w,
+                  name: `Coinbase USD (${products.length})`,
+                  symbols: cryptoIds.slice(0, 80),
+                }
+              : w
+          )
+        );
+      } catch {
+        /* keep samples */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const refreshMarket = useCallback(async () => {
-    const cryptoSyms = INSTRUMENTS.filter((i) => i.assetClass === "crypto").map((i) => i.symbol);
+    const cryptoSyms = instruments
+      .filter((i) => i.assetClass === "crypto")
+      .map((i) => i.symbol);
+    const quoteSyms = Array.from(
+      new Set([selected.symbol, ...cryptoSyms.slice(0, 24), ...DEFAULT_WATCHLISTS.flatMap((w) => w.symbols)])
+    ).filter((s) => s.includes("-"));
+
     try {
-      const live = await coinbaseLedgerProvider.fetchQuotes(cryptoSyms);
+      const live = await coinbaseLedgerProvider.fetchQuotes(quoteSyms);
       const merged = buildSimulatedQuotes(live);
-      // Approximate daily change for live crypto from candle open when possible
-      setQuotes(merged);
+      // Prefer live for any crypto we have
+      const byLive = new Map(live.map((q) => [q.symbol, q]));
+      const combined = merged.map((q) => byLive.get(q.symbol) ?? q);
+      for (const q of live) {
+        if (!combined.find((c) => c.symbol === q.symbol)) combined.push(q);
+      }
+      setQuotes(combined);
       setFeedStatus(live.length ? "connected" : "degraded");
       setDataAsOf(new Date().toISOString());
 
-      const isCrypto = selected.assetClass === "crypto";
+      const isCrypto =
+        selected.assetClass === "crypto" || selected.symbol.includes("-");
       if (isCrypto) {
-        const [c, b] = await Promise.all([
-          coinbaseLedgerProvider.fetchCandles(selected.symbol),
-          coinbaseLedgerProvider.fetchOrderBook(selected.symbol),
-        ]);
-        if (c.length >= 2) {
-          const first = c[0].open;
-          const last = c[c.length - 1].close;
-          const change = last - first;
-          const changePct = first ? (change / first) * 100 : 0;
-          setQuotes((prev) =>
-            prev.map((q) =>
-              q.symbol === selected.symbol
-                ? {
-                    ...q,
-                    last,
-                    change: Number(change.toFixed(6)),
-                    changePct: Number(changePct.toFixed(2)),
-                    freshness: "live",
-                  }
-                : q
-            )
-          );
+        setChartStatus("loading");
+        setChartError(null);
+        try {
+          const [c, b] = await Promise.all([
+            coinbaseLedgerProvider.fetchCandles(selected.symbol),
+            coinbaseLedgerProvider.fetchOrderBook(selected.symbol),
+          ]);
+          if (c.length >= 2) {
+            const first = c[0].open;
+            const last = c[c.length - 1].close;
+            const change = last - first;
+            const changePct = first ? (change / first) * 100 : 0;
+            setQuotes((prev) => {
+              const next = prev.map((q) =>
+                q.symbol === selected.symbol
+                  ? {
+                      ...q,
+                      last,
+                      change: Number(change.toFixed(6)),
+                      changePct: Number(changePct.toFixed(2)),
+                      freshness: "live" as const,
+                    }
+                  : q
+              );
+              if (!next.find((q) => q.symbol === selected.symbol)) {
+                next.push({
+                  symbol: selected.symbol,
+                  last,
+                  change: Number(change.toFixed(6)),
+                  changePct: Number(changePct.toFixed(2)),
+                  timestamp: new Date().toISOString(),
+                  freshness: "live",
+                });
+              }
+              return next;
+            });
+            setCandles(c);
+            setChartStatus("ready");
+          } else {
+            setCandles([]);
+            setChartStatus("empty");
+            setChartError("Coinbase returned no candles for this product.");
+          }
+          setBook(b);
+        } catch (err) {
+          setCandles([]);
+          setBook(null);
+          setChartStatus("error");
+          setChartError(err instanceof Error ? err.message : String(err));
         }
-        setCandles(c);
-        setBook(b);
       } else {
         setCandles([]);
         setBook(null);
+        setChartStatus("empty");
+        setChartError(null);
       }
     } catch {
       setFeedStatus("disconnected");
       setQuotes(buildSimulatedQuotes([]));
+      setChartStatus("error");
+      setChartError("Market refresh failed");
     }
-  }, [selected]);
+  }, [selected, instruments]);
 
   useEffect(() => {
     void refreshMarket();
-    const id = window.setInterval(() => void refreshMarket(), 10_000);
+    const id = window.setInterval(() => void refreshMarket(), 12_000);
     return () => window.clearInterval(id);
   }, [refreshMarket]);
 
@@ -177,7 +291,10 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
         createdAt: now,
         updatedAt: now,
         mode: "simulated",
-        fillPrice: order.type === "market" ? order.limitPrice ?? quoteMap.get(order.symbol)?.last : undefined,
+        fillPrice:
+          order.type === "market"
+            ? order.limitPrice ?? quoteMap.get(order.symbol)?.last
+            : undefined,
       };
       setOrders((prev) => [filled, ...prev]);
     },
@@ -199,11 +316,15 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
     setWorkspace,
     selected,
     selectSymbol,
+    instruments,
+    coinbaseProductsLoaded,
     search,
     setSearch,
     quotes,
     quoteMap,
     candles,
+    chartStatus,
+    chartError,
     book,
     watchlists,
     activeWatchlistId,

@@ -17,9 +17,13 @@ import type { Candle } from "@/lib/quantedge/types";
 export default function CandleChart({
   candles,
   symbol,
+  status,
+  error,
 }: {
   candles: Candle[];
   symbol: string;
+  status: "idle" | "loading" | "ready" | "empty" | "error";
+  error?: string | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -28,7 +32,8 @@ export default function CandleChart({
 
   useEffect(() => {
     if (!ref.current) return;
-    const chart = createChart(ref.current, {
+    const el = ref.current;
+    const chart = createChart(el, {
       layout: {
         background: { type: ColorType.Solid, color: "#12161c" },
         textColor: "#8b97a8",
@@ -43,6 +48,7 @@ export default function CandleChart({
       timeScale: { borderColor: "#2a3340", timeVisible: true },
       crosshair: { mode: 0 },
       height: 360,
+      width: el.clientWidth || 640,
     });
     const candlesApi = chart.addSeries(CandlestickSeries, {
       upColor: "#0ecb81",
@@ -64,15 +70,16 @@ export default function CandleChart({
     volumeSeries.current = volApi;
 
     const ro = new ResizeObserver(() => {
-      if (ref.current) chart.applyOptions({ width: ref.current.clientWidth });
+      if (ref.current) chart.applyOptions({ width: Math.max(ref.current.clientWidth, 100) });
     });
-    ro.observe(ref.current);
-    chart.applyOptions({ width: ref.current.clientWidth });
+    ro.observe(el);
 
     return () => {
       ro.disconnect();
       chart.remove();
       chartRef.current = null;
+      candleSeries.current = null;
+      volumeSeries.current = null;
     };
   }, []);
 
@@ -83,15 +90,22 @@ export default function CandleChart({
       volumeSeries.current.setData([]);
       return;
     }
-    const cdata: CandlestickData[] = candles.map((c) => ({
-      time: c.time as UTCTimestamp,
+    // Deduplicate / sort times for lightweight-charts
+    const byTime = new Map<number, Candle>();
+    for (const c of candles) {
+      const t = Math.floor(c.time);
+      byTime.set(t, c);
+    }
+    const sorted = [...byTime.entries()].sort((a, b) => a[0] - b[0]);
+    const cdata: CandlestickData[] = sorted.map(([time, c]) => ({
+      time: time as UTCTimestamp,
       open: c.open,
       high: c.high,
       low: c.low,
       close: c.close,
     }));
-    const vdata: HistogramData[] = candles.map((c) => ({
-      time: c.time as UTCTimestamp,
+    const vdata: HistogramData[] = sorted.map(([time, c]) => ({
+      time: time as UTCTimestamp,
       value: c.volume,
       color: c.close >= c.open ? "rgba(14,203,129,0.35)" : "rgba(246,70,93,0.35)",
     }));
@@ -100,14 +114,23 @@ export default function CandleChart({
     chartRef.current?.timeScale().fitContent();
   }, [candles, symbol]);
 
-  if (candles.length < 2) {
-    return (
-      <div className="flex h-[360px] items-center justify-center rounded border border-dashed border-qe-border bg-qe-bg text-xs text-qe-muted">
-        No candle series for {symbol}. Crypto products load live from Coinbase; other
-        asset classes show simulated quotes only until a vendor feed is connected.
-      </div>
-    );
-  }
+  const overlay =
+    status === "loading"
+      ? `Loading live candles for ${symbol}…`
+      : status === "error"
+        ? error || `Failed to load chart for ${symbol}`
+        : status === "empty" || candles.length < 2
+          ? `No live candle series for ${symbol}. Pick a Coinbase USD crypto from the dropdown.`
+          : null;
 
-  return <div ref={ref} className="h-[360px] w-full" />;
+  return (
+    <div className="relative h-[360px] w-full">
+      <div ref={ref} className="h-full w-full" />
+      {overlay ? (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded border border-dashed border-qe-border bg-qe-bg/80 px-4 text-center text-xs text-qe-muted">
+          {overlay}
+        </div>
+      ) : null}
+    </div>
+  );
 }

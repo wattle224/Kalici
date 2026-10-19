@@ -1,26 +1,33 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { INSTRUMENTS } from "@/lib/quantedge/sampleData";
 import { useTerminal } from "@/lib/quantedge/TerminalContext";
 
 export default function CommandPalette() {
-  const { commandOpen, setCommandOpen, selectSymbol, setWorkspace, providerNote } =
-    useTerminal();
+  const {
+    commandOpen,
+    setCommandOpen,
+    selectSymbol,
+    setWorkspace,
+    providerNote,
+    instruments,
+  } = useTerminal();
   const [q, setQ] = useState("");
 
   const results = useMemo(() => {
     const query = q.trim().toLowerCase();
-    if (!query) return INSTRUMENTS.slice(0, 8);
-    return INSTRUMENTS.filter(
-      (i) =>
-        i.symbol.toLowerCase().includes(query) ||
-        i.name.toLowerCase().includes(query) ||
-        i.assetClass.includes(query) ||
-        (i.isin?.toLowerCase().includes(query) ?? false) ||
-        i.exchange.toLowerCase().includes(query)
-    ).slice(0, 12);
-  }, [q]);
+    if (!query) return instruments.slice(0, 12);
+    return instruments
+      .filter(
+        (i) =>
+          i.symbol.toLowerCase().includes(query) ||
+          i.name.toLowerCase().includes(query) ||
+          i.assetClass.includes(query) ||
+          (i.isin?.toLowerCase().includes(query) ?? false) ||
+          i.exchange.toLowerCase().includes(query)
+      )
+      .slice(0, 20);
+  }, [q, instruments]);
 
   if (!commandOpen) return null;
 
