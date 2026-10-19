@@ -6,19 +6,26 @@
     "dev": "next dev -H 127.0.0.1 -p 3000",
     "build": "next build",
     "start": "next start -H 127.0.0.1 -p 3000",
-    "clean-restart": "rm -rf .next && node scripts/clean-restart.mjs"
+    "clean-restart": "rm -rf .next && node scripts/clean-restart.mjs",
+    "smoke": "node scripts/smoke-quantedge.mjs"
   },
   "dependencies": {
+    "clsx": "^2.1.1",
+    "lightweight-charts": "^5.2.1",
+    "lucide-react": "^1.59.0",
     "next": "^14.2.0",
     "nodemailer": "^6.9.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },
   "devDependencies": {
+    "@types/node": "^20.19.43",
     "@types/nodemailer": "^6.4.0",
-    "@types/node": "^20.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.6.1",
+    "postcss": "^8.5.30",
+    "tailwindcss": "^3.4.19",
     "typescript": "^5.4.0"
   }
 }

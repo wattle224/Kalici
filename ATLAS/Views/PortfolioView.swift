@@ -51,7 +51,7 @@ struct InvestmentDetailView: View {
                 LabeledContent("Manager", value: investment.manager)
                 LabeledContent("Vintage", value: String(investment.vintageYear))
                 LabeledContent("Asset class", value: investment.assetClass.rawValue)
-                LabeledContent("Status", value: investment.status.rawValue.capitalized)
+                LabeledContent("Status", value: investment.status.displayName)
             }
 
             Section("Capital") {

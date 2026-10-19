@@ -13,6 +13,14 @@ enum InvestmentStatus: String, Codable {
     case active
     case fullyInvested
     case realized
+
+    var displayName: String {
+        switch self {
+        case .active: return "Active"
+        case .fullyInvested: return "Fully invested"
+        case .realized: return "Realized"
+        }
+    }
 }
 
 struct Investment: Identifiable, Codable, Hashable {
