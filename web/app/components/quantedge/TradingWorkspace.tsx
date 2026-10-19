@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { TIMEFRAME_CONFIG } from "@/lib/quantedge/chartTimeframes";
 import { useTerminal } from "@/lib/quantedge/TerminalContext";
 import CandleChart from "./CandleChart";
 import { Badge, Button, Field, FreshnessBadge, Input, Panel, PnL, Select } from "./ui";
 import type { OrderSide, OrderType, TimeInForce } from "@/lib/quantedge/types";
+import { CHART_TIMEFRAMES } from "@/lib/quantedge/types";
 
 export default function TradingWorkspace() {
   const {
@@ -18,6 +20,8 @@ export default function TradingWorkspace() {
     reloadCoinbaseProducts,
     quoteMap,
     candles,
+    chartTimeframe,
+    setChartTimeframe,
     chartStatus,
     chartError,
     book,
@@ -247,6 +251,28 @@ export default function TradingWorkspace() {
             </div>
           }
         >
+          <div className="mb-2 flex flex-wrap items-center gap-1">
+            <span className="mr-1 text-[10px] uppercase tracking-wide text-qe-muted">
+              Timeframe
+            </span>
+            {CHART_TIMEFRAMES.map((tf) => (
+              <button
+                key={tf.id}
+                type="button"
+                onClick={() => setChartTimeframe(tf.id)}
+                className={`rounded border px-2.5 py-1 font-mono text-xs ${
+                  chartTimeframe === tf.id
+                    ? "border-qe-accent bg-qe-accent/20 text-qe-accent"
+                    : "border-qe-border text-qe-muted hover:bg-qe-elevated hover:text-qe-text"
+                }`}
+              >
+                {tf.label}
+              </button>
+            ))}
+            <span className="ml-2 text-[10px] text-qe-muted">
+              {TIMEFRAME_CONFIG[chartTimeframe].note}
+            </span>
+          </div>
           <CandleChart
             candles={candles}
             symbol={selected.symbol}
@@ -258,7 +284,8 @@ export default function TradingWorkspace() {
               Asset: <span className="text-qe-text">{selected.assetClass}</span>
             </div>
             <div>
-              Exchange: <span className="text-qe-text">{selected.exchange}</span>
+              Interval:{" "}
+              <span className="text-qe-text">{chartTimeframe.toUpperCase()}</span>
             </div>
             <div>
               CCY: <span className="text-qe-text">{selected.currency}</span>

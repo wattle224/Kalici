@@ -5,7 +5,11 @@ export interface MarketProvider {
   id: string;
   label: string;
   fetchQuotes(symbols: string[]): Promise<Quote[]>;
-  fetchCandles(symbol: string, granularitySec?: number): Promise<Candle[]>;
+  fetchCandles(
+    symbol: string,
+    granularitySec?: number,
+    limit?: number
+  ): Promise<Candle[]>;
   fetchOrderBook(symbol: string): Promise<OrderBook | null>;
   fetchProducts(): Promise<Instrument[]>;
   searchCoverageNote: string;
@@ -85,9 +89,9 @@ export const coinbaseLedgerProvider: MarketProvider = {
     }
     return out;
   },
-  async fetchCandles(symbol, granularitySec = 3600) {
+  async fetchCandles(symbol, granularitySec = 3600, limit = 168) {
     const data = (await tryJson([
-      `/api/coinbase/market?product=${encodeURIComponent(symbol)}&granularity=${granularitySec}&limit=168`,
+      `/api/coinbase/market?product=${encodeURIComponent(symbol)}&granularity=${granularitySec}&limit=${limit}`,
     ])) as { candles?: Candle[]; ok?: boolean; error?: string } | null;
     return data?.candles ?? [];
   },

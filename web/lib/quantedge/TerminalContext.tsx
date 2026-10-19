@@ -15,9 +15,11 @@ import {
   DEFAULT_WATCHLISTS,
   INSTRUMENTS as SAMPLE_INSTRUMENTS,
 } from "./sampleData";
+import { prepareCandlesForTimeframe, TIMEFRAME_CONFIG } from "./chartTimeframes";
 import { coinbaseLedgerProvider, DEFAULT_SYMBOL } from "./providers";
 import type {
   Candle,
+  ChartTimeframe,
   Instrument,
   OrderBook,
   Quote,
@@ -42,6 +44,8 @@ interface TerminalState {
   quotes: Quote[];
   quoteMap: Map<string, Quote>;
   candles: Candle[];
+  chartTimeframe: ChartTimeframe;
+  setChartTimeframe: (tf: ChartTimeframe) => void;
   chartStatus: "idle" | "loading" | "ready" | "empty" | "error";
   chartError: string | null;
   book: OrderBook | null;
@@ -113,6 +117,7 @@ export function TerminalProvider({
   const [search, setSearch] = useState("");
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [candles, setCandles] = useState<Candle[]>([]);
+  const [chartTimeframe, setChartTimeframe] = useState<ChartTimeframe>("1h");
   const [chartStatus, setChartStatus] = useState<"idle" | "loading" | "ready" | "empty" | "error">(
     "idle"
   );
@@ -226,11 +231,17 @@ export function TerminalProvider({
       if (isCrypto) {
         setChartStatus("loading");
         setChartError(null);
+        const tfCfg = TIMEFRAME_CONFIG[chartTimeframe];
         try {
-          const [c, b] = await Promise.all([
-            coinbaseLedgerProvider.fetchCandles(selected.symbol),
+          const [rawCandles, b] = await Promise.all([
+            coinbaseLedgerProvider.fetchCandles(
+              selected.symbol,
+              tfCfg.apiGranularitySec,
+              tfCfg.limit
+            ),
             coinbaseLedgerProvider.fetchOrderBook(selected.symbol),
           ]);
+          const c = prepareCandlesForTimeframe(rawCandles, chartTimeframe);
           if (c.length >= 2) {
             const first = c[0].open;
             const last = c[c.length - 1].close;
@@ -286,13 +297,14 @@ export function TerminalProvider({
       setChartStatus("error");
       setChartError("Market refresh failed");
     }
-  }, [selected, instruments]);
+  }, [selected, instruments, chartTimeframe]);
 
   useEffect(() => {
     void refreshMarket();
-    const id = window.setInterval(() => void refreshMarket(), 12_000);
+    const refreshMs = TIMEFRAME_CONFIG[chartTimeframe].refreshMs;
+    const id = window.setInterval(() => void refreshMarket(), refreshMs);
     return () => window.clearInterval(id);
-  }, [refreshMarket]);
+  }, [refreshMarket, chartTimeframe]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -363,6 +375,8 @@ export function TerminalProvider({
     quotes,
     quoteMap,
     candles,
+    chartTimeframe,
+    setChartTimeframe,
     chartStatus,
     chartError,
     book,

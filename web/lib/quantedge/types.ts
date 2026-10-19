@@ -48,6 +48,17 @@ export interface Candle {
   volume: number;
 }
 
+/** Chart interval selector (Coinbase native gran + 3m aggregated from 1m). */
+export type ChartTimeframe = "live" | "3m" | "5m" | "15m" | "1h";
+
+export const CHART_TIMEFRAMES: { id: ChartTimeframe; label: string }[] = [
+  { id: "live", label: "Live" },
+  { id: "3m", label: "3m" },
+  { id: "5m", label: "5m" },
+  { id: "15m", label: "15m" },
+  { id: "1h", label: "1h" },
+];
+
 export interface DepthLevel {
   price: number;
   size: number;
