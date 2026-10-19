@@ -13,6 +13,9 @@ export default function TradingWorkspace() {
     search,
     instruments,
     coinbaseProductsLoaded,
+    coinbaseProductCount,
+    productsLoadError,
+    reloadCoinbaseProducts,
     quoteMap,
     candles,
     chartStatus,
@@ -32,27 +35,43 @@ export default function TradingWorkspace() {
   const wl = watchlists.find((w) => w.id === activeWatchlistId) ?? watchlists[0];
 
   const cryptoInstruments = useMemo(
-    () => instruments.filter((i) => i.assetClass === "crypto"),
+    () => instruments.filter((i) => i.assetClass === "crypto").sort((a, b) => a.symbol.localeCompare(b.symbol)),
     [instruments]
   );
 
+  const [localFilter, setLocalFilter] = useState("");
+
   const filteredInstruments = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const pool =
-      activeWatchlistId === "wl-crypto"
-        ? cryptoInstruments
-        : instruments.filter((i) => wl.symbols.includes(i.symbol) || i.assetClass !== "crypto");
-    if (!q) return pool.slice(0, 120);
-    return instruments
-      .filter(
-        (i) =>
-          i.symbol.toLowerCase().includes(q) ||
-          i.name.toLowerCase().includes(q) ||
-          i.assetClass.includes(q) ||
-          (i.isin?.toLowerCase().includes(q) ?? false)
-      )
-      .slice(0, 120);
-  }, [search, instruments, cryptoInstruments, wl, activeWatchlistId]);
+    const q = (localFilter || search).trim().toLowerCase();
+    // Always prefer full Coinbase catalog for the crypto watchlist / default view
+    const showAllCrypto =
+      activeWatchlistId === "wl-crypto" || coinbaseProductsLoaded;
+    let pool: typeof instruments;
+    if (showAllCrypto && activeWatchlistId === "wl-crypto") {
+      pool = cryptoInstruments;
+    } else if (activeWatchlistId === "wl-crypto") {
+      pool = cryptoInstruments;
+    } else {
+      pool = instruments.filter((i) => wl.symbols.includes(i.symbol));
+      if (!pool.length) pool = cryptoInstruments;
+    }
+    if (!q) return pool;
+    return pool.filter(
+      (i) =>
+        i.symbol.toLowerCase().includes(q) ||
+        i.name.toLowerCase().includes(q) ||
+        i.assetClass.includes(q) ||
+        (i.isin?.toLowerCase().includes(q) ?? false)
+    );
+  }, [
+    localFilter,
+    search,
+    instruments,
+    cryptoInstruments,
+    wl,
+    activeWatchlistId,
+    coinbaseProductsLoaded,
+  ]);
 
   const [side, setSide] = useState<OrderSide>("buy");
   const [orderType, setOrderType] = useState<OrderType>("market");
@@ -86,15 +105,44 @@ export default function TradingWorkspace() {
         <Panel title="Security selector" className="max-h-[70vh] lg:max-h-none lg:flex-1">
           <p className="mb-2 text-[10px] text-qe-muted">{providerNote}</p>
 
-          <Field label={`Coinbase USD products${coinbaseProductsLoaded ? ` (${cryptoInstruments.length})` : " (loading…)"}`}>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <Badge tone={coinbaseProductsLoaded ? "green" : productsLoadError ? "red" : "amber"}>
+              {coinbaseProductsLoaded
+                ? `${coinbaseProductCount || cryptoInstruments.length} Coinbase USD`
+                : productsLoadError
+                  ? "Catalog failed"
+                  : "Loading catalog…"}
+            </Badge>
+            <Button
+              onClick={() => {
+                void reloadCoinbaseProducts();
+                setActiveWatchlistId("wl-crypto");
+              }}
+            >
+              Reload
+            </Button>
+          </div>
+          {productsLoadError ? (
+            <p className="mb-2 text-[10px] text-qe-red">{productsLoadError}</p>
+          ) : null}
+
+          <Field
+            label={`Dropdown — all Coinbase USD pairs (${cryptoInstruments.length})`}
+          >
             <Select
-              value={selected.assetClass === "crypto" ? selected.symbol : ""}
+              value={
+                cryptoInstruments.some((i) => i.symbol === selected.symbol)
+                  ? selected.symbol
+                  : ""
+              }
               onChange={(e) => {
                 if (e.target.value) selectSymbol(e.target.value);
               }}
             >
               <option value="" disabled>
-                Select Coinbase crypto…
+                {coinbaseProductsLoaded
+                  ? `Select from ${cryptoInstruments.length} products…`
+                  : "Loading Coinbase products…"}
               </option>
               {cryptoInstruments.map((ins) => (
                 <option key={ins.id} value={ins.symbol}>
@@ -104,12 +152,23 @@ export default function TradingWorkspace() {
             </Select>
           </Field>
 
+          <Field label="Filter list">
+            <Input
+              value={localFilter}
+              onChange={(e) => setLocalFilter(e.target.value)}
+              placeholder="Type e.g. DOGE, AVAX, LINK…"
+            />
+          </Field>
+
           <div className="mb-2 mt-2 flex flex-wrap gap-1">
             {watchlists.map((w) => (
               <button
                 key={w.id}
                 type="button"
-                onClick={() => setActiveWatchlistId(w.id)}
+                onClick={() => {
+                  setActiveWatchlistId(w.id);
+                  setLocalFilter("");
+                }}
                 className={`rounded px-2 py-0.5 text-[10px] ${
                   activeWatchlistId === w.id
                     ? "bg-qe-accent/20 text-qe-accent"
@@ -120,6 +179,10 @@ export default function TradingWorkspace() {
               </button>
             ))}
           </div>
+          <p className="mb-1 text-[10px] text-qe-muted">
+            Showing {filteredInstruments.length}
+            {activeWatchlistId === "wl-crypto" ? " (full Coinbase USD list — scroll or filter)" : ""}
+          </p>
           <ul className="max-h-[42vh] space-y-1 overflow-auto">
             {filteredInstruments.map((ins) => {
               const q = quoteMap.get(ins.symbol);

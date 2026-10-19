@@ -34,6 +34,9 @@ interface TerminalState {
   selectSymbol: (symbol: string, opts?: { stay?: boolean }) => void;
   instruments: Instrument[];
   coinbaseProductsLoaded: boolean;
+  coinbaseProductCount: number;
+  productsLoadError: string | null;
+  reloadCoinbaseProducts: () => Promise<void>;
   search: string;
   setSearch: (s: string) => void;
   quotes: Quote[];
@@ -85,6 +88,8 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const [workspace, setWorkspace] = useState<WorkspaceId>("trading");
   const [instruments, setInstruments] = useState<Instrument[]>(SAMPLE_INSTRUMENTS);
   const [coinbaseProductsLoaded, setCoinbaseProductsLoaded] = useState(false);
+  const [coinbaseProductCount, setCoinbaseProductCount] = useState(0);
+  const [productsLoadError, setProductsLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Instrument>(
     () => SAMPLE_INSTRUMENTS.find((i) => i.symbol === DEFAULT_SYMBOL) ?? SAMPLE_INSTRUMENTS[0]
   );
@@ -134,34 +139,41 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
     [findInstrument]
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const products = await coinbaseLedgerProvider.fetchProducts();
-        if (cancelled || !products.length) return;
-        setInstruments((prev) => mergeInstruments(prev, products));
-        setCoinbaseProductsLoaded(true);
-        const cryptoIds = products.map((p) => p.symbol);
-        setWatchlists((prev) =>
-          prev.map((w) =>
-            w.id === "wl-crypto"
-              ? {
-                  ...w,
-                  name: `Coinbase USD (${products.length})`,
-                  symbols: cryptoIds.slice(0, 80),
-                }
-              : w
-          )
-        );
-      } catch {
-        /* keep samples */
+  const reloadCoinbaseProducts = useCallback(async () => {
+    setProductsLoadError(null);
+    try {
+      const products = await coinbaseLedgerProvider.fetchProducts();
+      if (!products.length) {
+        setProductsLoadError("Coinbase product catalog returned 0 USD pairs.");
+        setCoinbaseProductsLoaded(false);
+        setCoinbaseProductCount(0);
+        return;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      setInstruments((prev) => mergeInstruments(prev, products));
+      setCoinbaseProductsLoaded(true);
+      setCoinbaseProductCount(products.length);
+      const cryptoIds = products.map((p) => p.symbol);
+      setWatchlists((prev) =>
+        prev.map((w) =>
+          w.id === "wl-crypto"
+            ? {
+                ...w,
+                name: `All Coinbase USD (${products.length})`,
+                symbols: cryptoIds,
+              }
+            : w
+        )
+      );
+    } catch (err) {
+      setCoinbaseProductsLoaded(false);
+      setCoinbaseProductCount(0);
+      setProductsLoadError(err instanceof Error ? err.message : String(err));
+    }
   }, []);
+
+  useEffect(() => {
+    void reloadCoinbaseProducts();
+  }, [reloadCoinbaseProducts]);
 
   const refreshMarket = useCallback(async () => {
     const cryptoSyms = instruments
@@ -318,6 +330,9 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
     selectSymbol,
     instruments,
     coinbaseProductsLoaded,
+    coinbaseProductCount,
+    productsLoadError,
+    reloadCoinbaseProducts,
     search,
     setSearch,
     quotes,
