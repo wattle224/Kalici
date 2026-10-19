@@ -84,15 +84,32 @@ function mergeInstruments(base: Instrument[], coinbase: Instrument[]): Instrumen
   });
 }
 
-export function TerminalProvider({ children }: { children: ReactNode }) {
+export function TerminalProvider({
+  children,
+  initialProducts = [],
+}: {
+  children: ReactNode;
+  initialProducts?: Instrument[];
+}) {
   const [workspace, setWorkspace] = useState<WorkspaceId>("trading");
-  const [instruments, setInstruments] = useState<Instrument[]>(SAMPLE_INSTRUMENTS);
-  const [coinbaseProductsLoaded, setCoinbaseProductsLoaded] = useState(false);
-  const [coinbaseProductCount, setCoinbaseProductCount] = useState(0);
-  const [productsLoadError, setProductsLoadError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Instrument>(
-    () => SAMPLE_INSTRUMENTS.find((i) => i.symbol === DEFAULT_SYMBOL) ?? SAMPLE_INSTRUMENTS[0]
+  const [instruments, setInstruments] = useState<Instrument[]>(() =>
+    initialProducts.length
+      ? mergeInstruments(SAMPLE_INSTRUMENTS, initialProducts)
+      : SAMPLE_INSTRUMENTS
   );
+  const [coinbaseProductsLoaded, setCoinbaseProductsLoaded] = useState(
+    () => initialProducts.length > 0
+  );
+  const [coinbaseProductCount, setCoinbaseProductCount] = useState(
+    () => initialProducts.length
+  );
+  const [productsLoadError, setProductsLoadError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Instrument>(() => {
+    const merged = initialProducts.length
+      ? mergeInstruments(SAMPLE_INSTRUMENTS, initialProducts)
+      : SAMPLE_INSTRUMENTS;
+    return merged.find((i) => i.symbol === DEFAULT_SYMBOL) ?? merged[0];
+  });
   const [search, setSearch] = useState("");
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [candles, setCandles] = useState<Candle[]>([]);
@@ -101,7 +118,15 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   );
   const [chartError, setChartError] = useState<string | null>(null);
   const [book, setBook] = useState<OrderBook | null>(null);
-  const [watchlists, setWatchlists] = useState(DEFAULT_WATCHLISTS);
+  const [watchlists, setWatchlists] = useState(() => {
+    if (!initialProducts.length) return DEFAULT_WATCHLISTS;
+    const cryptoIds = initialProducts.map((p) => p.symbol);
+    return DEFAULT_WATCHLISTS.map((w) =>
+      w.id === "wl-crypto"
+        ? { ...w, name: `All Coinbase USD (${initialProducts.length})`, symbols: cryptoIds }
+        : w
+    );
+  });
   const [activeWatchlistId, setActiveWatchlistId] = useState(DEFAULT_WATCHLISTS[0].id);
   const [feedStatus, setFeedStatus] = useState<"connected" | "degraded" | "disconnected">(
     "disconnected"

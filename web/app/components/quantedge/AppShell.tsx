@@ -1,6 +1,7 @@
 "use client";
 
 import { TerminalProvider, useTerminal } from "@/lib/quantedge/TerminalContext";
+import type { Instrument } from "@/lib/quantedge/types";
 import BottomTicker from "./BottomTicker";
 import CommandPalette from "./CommandPalette";
 import Header from "./Header";
@@ -15,9 +16,13 @@ function WorkspaceSwitch() {
   return <TradingWorkspace />;
 }
 
-export default function AppShell() {
+export default function AppShell({
+  initialProducts = [],
+}: {
+  initialProducts?: Instrument[];
+}) {
   return (
-    <TerminalProvider>
+    <TerminalProvider initialProducts={initialProducts}>
       <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-qe-bg text-qe-text">
         <Header />
         <main className="min-h-0 flex-1 overflow-hidden">

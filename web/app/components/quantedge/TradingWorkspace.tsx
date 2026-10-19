@@ -101,35 +101,35 @@ export default function TradingWorkspace() {
 
   return (
     <div className="grid h-full min-h-0 grid-cols-12 gap-2 p-2">
-      <aside className="col-span-12 flex min-h-0 flex-col gap-2 lg:col-span-2">
-        <Panel title="Security selector" className="max-h-[70vh] lg:max-h-none lg:flex-1">
-          <p className="mb-2 text-[10px] text-qe-muted">{providerNote}</p>
-
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <Badge tone={coinbaseProductsLoaded ? "green" : productsLoadError ? "red" : "amber"}>
-              {coinbaseProductsLoaded
-                ? `${coinbaseProductCount || cryptoInstruments.length} Coinbase USD`
-                : productsLoadError
-                  ? "Catalog failed"
-                  : "Loading catalog…"}
-            </Badge>
-            <Button
-              onClick={() => {
-                void reloadCoinbaseProducts();
-                setActiveWatchlistId("wl-crypto");
-              }}
-            >
-              Reload
-            </Button>
-          </div>
-          {productsLoadError ? (
-            <p className="mb-2 text-[10px] text-qe-red">{productsLoadError}</p>
-          ) : null}
-
-          <Field
-            label={`Dropdown — all Coinbase USD pairs (${cryptoInstruments.length})`}
+      {/* Full-width selector — hard to miss */}
+      <section className="col-span-12 rounded border border-qe-accent/40 bg-qe-panel p-3">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-semibold text-qe-text">Security selector — Coinbase USD</h2>
+          <Badge tone={coinbaseProductsLoaded ? "green" : productsLoadError ? "red" : "amber"}>
+            {coinbaseProductsLoaded
+              ? `${coinbaseProductCount || cryptoInstruments.length} products loaded`
+              : productsLoadError
+                ? "Catalog failed"
+                : "Loading catalog…"}
+          </Badge>
+          <Button
+            onClick={() => {
+              void reloadCoinbaseProducts();
+              setActiveWatchlistId("wl-crypto");
+            }}
           >
-            <Select
+            Reload catalog
+          </Button>
+          <span className="text-[11px] text-qe-muted">{providerNote}</span>
+        </div>
+        {productsLoadError ? (
+          <p className="mb-2 text-xs text-qe-red">{productsLoadError}</p>
+        ) : null}
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+          <label className="block text-[11px] text-qe-muted">
+            Dropdown (all pairs)
+            <select
+              className="mt-1 w-full rounded border border-qe-border bg-qe-bg px-2 py-2 font-mono text-sm text-qe-text outline-none focus:border-qe-accent"
               value={
                 cryptoInstruments.some((i) => i.symbol === selected.symbol)
                   ? selected.symbol
@@ -141,7 +141,7 @@ export default function TradingWorkspace() {
             >
               <option value="" disabled>
                 {coinbaseProductsLoaded
-                  ? `Select from ${cryptoInstruments.length} products…`
+                  ? `Select from ${cryptoInstruments.length} Coinbase USD products…`
                   : "Loading Coinbase products…"}
               </option>
               {cryptoInstruments.map((ins) => (
@@ -149,18 +149,34 @@ export default function TradingWorkspace() {
                   {ins.symbol} — {ins.name}
                 </option>
               ))}
-            </Select>
-          </Field>
-
-          <Field label="Filter list">
-            <Input
+            </select>
+          </label>
+          <label className="block text-[11px] text-qe-muted">
+            Filter / search
+            <input
+              className="mt-1 w-full rounded border border-qe-border bg-qe-bg px-2 py-2 text-sm text-qe-text outline-none focus:border-qe-accent"
               value={localFilter}
-              onChange={(e) => setLocalFilter(e.target.value)}
-              placeholder="Type e.g. DOGE, AVAX, LINK…"
+              onChange={(e) => {
+                setLocalFilter(e.target.value);
+                setActiveWatchlistId("wl-crypto");
+              }}
+              placeholder="Type DOGE, AVAX, LINK, AAVE…"
             />
-          </Field>
+          </label>
+          <div className="flex flex-col justify-end text-xs text-qe-text">
+            <div>
+              Selected: <span className="font-mono font-semibold">{selected.symbol}</span>
+            </div>
+            <div className="text-qe-muted">
+              List below shows {filteredInstruments.length} of {cryptoInstruments.length}
+            </div>
+          </div>
+        </div>
+      </section>
 
-          <div className="mb-2 mt-2 flex flex-wrap gap-1">
+      <aside className="col-span-12 flex min-h-0 flex-col gap-2 lg:col-span-3">
+        <Panel title="Instrument list" className="max-h-[70vh] lg:max-h-none lg:flex-1">
+          <div className="mb-2 flex flex-wrap gap-1">
             {watchlists.map((w) => (
               <button
                 key={w.id}
@@ -180,10 +196,9 @@ export default function TradingWorkspace() {
             ))}
           </div>
           <p className="mb-1 text-[10px] text-qe-muted">
-            Showing {filteredInstruments.length}
-            {activeWatchlistId === "wl-crypto" ? " (full Coinbase USD list — scroll or filter)" : ""}
+            Scroll the list or use the filter above. Full Coinbase USD catalog when loaded.
           </p>
-          <ul className="max-h-[42vh] space-y-1 overflow-auto">
+          <ul className="max-h-[50vh] space-y-1 overflow-auto lg:max-h-none">
             {filteredInstruments.map((ins) => {
               const q = quoteMap.get(ins.symbol);
               return (
@@ -213,7 +228,7 @@ export default function TradingWorkspace() {
         </Panel>
       </aside>
 
-      <div className="col-span-12 flex min-h-0 flex-col gap-2 lg:col-span-7">
+      <div className="col-span-12 flex min-h-0 flex-col gap-2 lg:col-span-6">
         <Panel
           title={`${selected.symbol} · ${selected.name}`}
           right={
