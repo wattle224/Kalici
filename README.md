@@ -21,13 +21,39 @@ See `web/README.md` for live vs simulated data boundaries.
 
 ---
 
+## Fix: Errno 10048 / “Launch did not complete successfully”
+
+That error means the **OneDrive Desktop shortcut still starts the old Python app**:
+
+`C:\Users\User\projects\Investment Management\backend` (FastAPI + `investment-dashboard`)
+
+Not Kalici / QuantEdge. Port **8000** is already taken (or the old launcher fights itself), so FastAPI dies and the browser never opens the real app.
+
+**PowerShell fix (copy/paste all of it):**
+
+```powershell
+$bat = Join-Path $env:TEMP 'FIX-WRONG-SHORTCUT.bat'
+Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/cursor/fix-onedrive-shortcut-ae22/FIX-WRONG-SHORTCUT.bat' -OutFile $bat
+cmd /c $bat
+```
+
+That will free ports 8000/3000, remove the bad OneDrive/Desktop shortcuts, disable the old `projects\` launcher, install/start **Desktop\Investment Management**, and open http://127.0.0.1:3000/
+
+Afterward, right-click **Investment Management.lnk** → Properties → Target must be:
+
+`...\Desktop\Investment Management\Investment-Management.bat`
+
+**Not** `...\projects\Investment Management\...`
+
+---
+
 ## Full install (Windows) — do this once
 
 **PowerShell (copy/paste all of it):**
 
 ```powershell
 $bat = Join-Path $env:TEMP 'INSTALL-Investment-Management.bat'
-Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/cursor/quantedge-terminal-ae22/INSTALL.bat' -OutFile $bat
+Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/cursor/fix-onedrive-shortcut-ae22/INSTALL.bat' -OutFile $bat
 cmd /c $bat
 ```
 
@@ -76,6 +102,7 @@ After merge, only use:
 
 | File | When to use |
 |------|-------------|
+| `FIX-WRONG-SHORTCUT.bat` | OneDrive shortcut still opens `projects\` / Errno 10048 |
 | `FIX-UTF16.bat` | Only if an **old Python** file shows `SyntaxError: ∀` |
 | `DIAGNOSE-PORTS.bat` | Check what is on ports 3000 / 8000 |
 | `ATLAS/` | Separate iOS app (Xcode) — not required for Windows |

@@ -8,10 +8,11 @@ echo  ============================================
 echo   INVESTMENT MANAGEMENT — FULL INSTALL
 echo  ============================================
 echo.
-echo  1. Remove ALL old Desktop shortcuts
+echo  1. Remove ALL old Desktop / OneDrive shortcuts
+echo     (including ones pointing at projects\Investment Management)
 echo  2. Install app to Desktop\Investment Management
-echo  3. Create ONE new shortcut
-echo  4. Start ledger + web UI
+echo  3. Create ONE new shortcut to Kalici / QuantEdge
+echo  4. Free ports 8000/3000 and start ledger + web UI
 echo.
 
 set "DEST=%USERPROFILE%\Desktop\Investment Management"
@@ -61,12 +62,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  Get-ChildItem -LiteralPath $d -Filter '*.lnk' -ErrorAction SilentlyContinue | ForEach-Object {" ^
   "    $shell=New-Object -ComObject WScript.Shell;" ^
   "    $t=$shell.CreateShortcut($_.FullName).TargetPath;" ^
-  "    if ($t -match 'Investment Management|Kalici|START-IAM|GET-IAM|Launch-Investment|iam-standalone|MERGE-INTO-ONE') {" ^
+  "    if ($t -match 'Investment Management|Kalici|START-IAM|GET-IAM|Launch-Investment|iam-standalone|MERGE-INTO-ONE|projects\\\\Investment') {" ^
   "      Remove-Item -LiteralPath $_.FullName -Force;" ^
-  "      Write-Host ('  removed ' + $_.FullName)" ^
+  "      Write-Host ('  removed ' + $_.FullName + ' (was ' + $t + ')')" ^
   "    }" ^
   "  }" ^
   "}"
+
+if exist "%USERPROFILE%\projects\Investment Management\Launch-Investment-Management.bat" (
+  ren "%USERPROFILE%\projects\Investment Management\Launch-Investment-Management.bat" "Launch-Investment-Management.bat.DISABLED" 2>nul
+  echo  [OK] Disabled projects\Investment Management\Launch-Investment-Management.bat
+)
 
 echo  [OK] Old shortcuts cleared
 echo.
@@ -89,6 +95,8 @@ if not exist "%SRC%\Investment-Management.bat" if not exist "%SRC%\backend\serve
   powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "$ErrorActionPreference='Stop';" ^
     "$urls=@(" ^
+    "  'https://github.com/wattle224/Kalici/archive/refs/heads/cursor/fix-onedrive-shortcut-ae22.zip'," ^
+    "  'https://github.com/wattle224/Kalici/archive/refs/heads/cursor/quantedge-terminal-ae22.zip'," ^
     "  'https://github.com/wattle224/Kalici/archive/refs/heads/cursor/iam-full-audit-ae22.zip'," ^
     "  'https://github.com/wattle224/Kalici/archive/refs/heads/main.zip'" ^
     ");" ^
@@ -119,6 +127,7 @@ if not exist "%SRC%\Investment-Management.bat" if not exist "%SRC%\backend\serve
   if exist "%SRC%\scripts" robocopy "%SRC%\scripts" "%DEST%\scripts" /E /XD __pycache__ /NFL /NDL /NJH /NJS /nc /ns /np >nul
   copy /Y "%SRC%\Investment-Management.bat" "%DEST%\Investment-Management.bat" >nul 2>nul
   copy /Y "%SRC%\INSTALL.bat" "%DEST%\INSTALL.bat" >nul 2>nul
+  copy /Y "%SRC%\FIX-WRONG-SHORTCUT.bat" "%DEST%\FIX-WRONG-SHORTCUT.bat" >nul 2>nul
   copy /Y "%SRC%\package.json" "%DEST%\package.json" >nul 2>nul
   copy /Y "%SRC%\README.md" "%DEST%\README.md" >nul 2>nul
 )
@@ -157,7 +166,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  $s=$shell.CreateShortcut($lnk);" ^
   "  $s.TargetPath=$target;" ^
   "  $s.WorkingDirectory=(Split-Path -Parent $target);" ^
-  "  $s.Description='Investment Management — full app';" ^
+  "  $s.Description='Investment Management — QuantEdge (Kalici Node ledger, not projects\\ Python app)';" ^
   "  $s.IconLocation='$env:SystemRoot\System32\imageres.dll,109';" ^
   "  $s.Save();" ^
   "  Write-Host ('  created ' + $lnk)" ^

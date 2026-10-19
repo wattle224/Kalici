@@ -8,8 +8,11 @@ echo.
 
 echo --- Port 8000 (backend / ledger) ---
 powershell -NoProfile -Command "try { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 3; Write-Host 'health:' $r.Content } catch { Write-Host 'health: FAIL' }"
-powershell -NoProfile -Command "try { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/docs' -TimeoutSec 3; Write-Host 'docs (FastAPI):' $r.StatusCode } catch { Write-Host 'docs: not FastAPI or down' }"
+powershell -NoProfile -Command "try { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/docs' -TimeoutSec 3; Write-Host 'docs (FastAPI OLD PYTHON APP):' $r.StatusCode; Write-Host '  If this works, your shortcut is still the projects\\ Python stack — run FIX-WRONG-SHORTCUT.bat' } catch { Write-Host 'docs: not FastAPI (good — Node ledger has no /docs)' }"
 powershell -NoProfile -Command "try { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/api/coinbase' -TimeoutSec 8; Write-Host 'coinbase:' $r.StatusCode $r.Content.Substring(0,[Math]::Min(120,$r.Content.Length)) } catch { Write-Host 'coinbase: FAIL' }"
+echo.
+echo --- Desktop shortcut targets ---
+powershell -NoProfile -Command "$shell=New-Object -ComObject WScript.Shell; $desks=@([Environment]::GetFolderPath('Desktop')); $one=Join-Path $env:USERPROFILE 'OneDrive\Desktop'; if (Test-Path $one){$desks+=$one}; foreach($d in ($desks|Select-Object -Unique)){ Get-ChildItem $d -Filter '*.lnk' -EA SilentlyContinue | Where-Object { $_.Name -match 'Investment|Kalici' } | ForEach-Object { $t=$shell.CreateShortcut($_.FullName).TargetPath; $bad=($t -match 'projects\\Investment'); Write-Host $_.FullName; Write-Host ('  -> ' + $t + $(if($bad){'  *** WRONG ***'}else{''})) } }"
 
 echo.
 echo --- Port 3000 (web UI) ---
