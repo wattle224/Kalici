@@ -32,8 +32,9 @@ Not Kalici / QuantEdge. Port **8000** is already taken (or the old launcher figh
 **If `Desktop\Investment Management` is empty** (or incomplete), paste this in PowerShell — it downloads the full app into that folder, creates the shortcut, and starts QuantEdge:
 
 ```powershell
-$ps1 = Join-Path $env:TEMP 'Install-To-Desktop.ps1'
-Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/cursor/fix-onedrive-shortcut-ae22/scripts/Install-To-Desktop.ps1' -OutFile $ps1
+$ps1 = "$env:TEMP\Install-To-Desktop.ps1"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/wattle224/Kalici/cursor/fix-onedrive-shortcut-ae22/scripts/Install-To-Desktop.ps1" -OutFile $ps1 -UseBasicParsing
+Write-Host "Saved $($ps1) size=$((Get-Item $ps1).Length)"
 powershell -NoProfile -ExecutionPolicy Bypass -File $ps1
 ```
 

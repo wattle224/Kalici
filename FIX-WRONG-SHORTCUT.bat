@@ -102,10 +102,21 @@ if not exist "%DEST%\Investment-Management.bat" (
   echo  App folder empty/missing — downloading full install script...
   set "IPS1=%TEMP%\Install-To-Desktop.ps1"
   powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "Invoke-WebRequest -Uri 'https://github.com/wattle224/Kalici/raw/cursor/fix-onedrive-shortcut-ae22/scripts/Install-To-Desktop.ps1' -OutFile '%IPS1%'"
-  if not exist "%IPS1%" (
+    "$ErrorActionPreference='Stop';" ^
+    "$out='%IPS1%';" ^
+    "$uri='https://raw.githubusercontent.com/wattle224/Kalici/cursor/fix-onedrive-shortcut-ae22/scripts/Install-To-Desktop.ps1';" ^
+    "Invoke-WebRequest -Uri $uri -OutFile $out -UseBasicParsing;" ^
+    "if (-not (Test-Path $out) -or (Get-Item $out).Length -lt 500) { throw 'download empty' };" ^
+    "Write-Host ('  saved ' + $out + ' (' + (Get-Item $out).Length + ' bytes)')"
+  if errorlevel 1 (
     color 0C
     echo  Could not download Install-To-Desktop.ps1. Check internet.
+    pause
+    exit /b 1
+  )
+  if not exist "%IPS1%" (
+    color 0C
+    echo  Download reported OK but file missing: %IPS1%
     pause
     exit /b 1
   )
