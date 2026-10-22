@@ -13,6 +13,9 @@ export type AssetClass =
 
 export type DataFreshness = "live" | "delayed" | "simulated";
 
+/** Terminal operating mode — market-data + labelling. Execution stays paper unless a live broker is configured. */
+export type OperatingMode = "simulated" | "production";
+
 export interface Instrument {
   id: string;
   symbol: string;
@@ -99,7 +102,8 @@ export interface SimulatedOrder {
   updatedAt: string;
   fillPrice?: number;
   estimatedValue: number;
-  mode: "simulated";
+  /** simulated = full paper/sim stack; paper = live market data, non-broker fills */
+  mode: "simulated" | "paper";
 }
 
 export interface Position {

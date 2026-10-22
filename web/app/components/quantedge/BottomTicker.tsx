@@ -46,7 +46,8 @@ function Chip({ item, onClick }: { item: TickerItem; onClick: () => void }) {
 }
 
 export default function BottomTicker() {
-  const { winners, losers, selectSymbol, dataAsOf, tickerFreshness } = useTerminal();
+  const { winners, losers, selectSymbol, dataAsOf, tickerFreshness, operatingMode } =
+    useTerminal();
   const [paused, setPaused] = useState(false);
   const [filter, setFilter] = useState<"all" | "winners" | "losers">("all");
 
@@ -63,6 +64,13 @@ export default function BottomTicker() {
       <div className="flex items-center gap-3 border-b border-qe-border px-3 py-1 text-[10px] uppercase tracking-[0.08em] text-qe-muted">
         <span className="font-semibold text-qe-green">Daily Winners &amp; Losers</span>
         <FreshnessBadge freshness={tickerFreshness} />
+        <span
+          className={
+            operatingMode === "production" ? "font-semibold text-qe-green" : "font-semibold text-qe-amber"
+          }
+        >
+          {operatingMode === "production" ? "Production" : "Simulated"}
+        </span>
         <span className="font-mono normal-case tracking-normal" suppressHydrationWarning>
           As of {dataAsOf ? new Date(dataAsOf).toLocaleString("en-GB", { hour12: false }) : "—"}
         </span>

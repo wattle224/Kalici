@@ -24,6 +24,8 @@ export default function Header() {
   const {
     workspace,
     setWorkspace,
+    operatingMode,
+    setOperatingMode,
     search,
     setSearch,
     selectSymbol,
@@ -33,6 +35,7 @@ export default function Header() {
     setCommandOpen,
     dataAsOf,
     tickerFreshness,
+    refreshMarket,
   } = useTerminal();
 
   return (
@@ -77,9 +80,45 @@ export default function Header() {
         </div>
 
         <div className="ml-auto flex flex-wrap items-center gap-2 text-[11px]">
+          <div
+            className="inline-flex items-center rounded border border-qe-border bg-qe-bg p-0.5"
+            role="group"
+            aria-label="Operating mode"
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setOperatingMode("simulated");
+                void refreshMarket();
+              }}
+              className={clsx(
+                "rounded px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                operatingMode === "simulated"
+                  ? "bg-qe-elevated text-qe-amber"
+                  : "text-qe-muted hover:text-qe-text"
+              )}
+            >
+              Simulated
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOperatingMode("production");
+                void refreshMarket();
+              }}
+              className={clsx(
+                "rounded px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                operatingMode === "production"
+                  ? "bg-qe-green/20 text-qe-green"
+                  : "text-qe-muted hover:text-qe-text"
+              )}
+            >
+              Production
+            </button>
+          </div>
           <Badge tone="blue">{selected.exchange}</Badge>
           <span className="font-mono text-qe-text">{selected.symbol}</span>
-          <Badge>{sessionLabel}</Badge>
+          <Badge tone={operatingMode === "production" ? "green" : "amber"}>{sessionLabel}</Badge>
           <span className="inline-flex items-center gap-1 text-qe-muted">
             <Circle
               className={clsx(

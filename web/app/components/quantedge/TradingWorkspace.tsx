@@ -33,6 +33,7 @@ export default function TradingWorkspace() {
     cancelOrder,
     providerNote,
     refreshMarket,
+    operatingMode,
   } = useTerminal();
 
   const quote = quoteMap.get(selected.symbol);
@@ -353,7 +354,14 @@ export default function TradingWorkspace() {
       </div>
 
       <aside className="col-span-12 flex min-h-0 flex-col gap-2 lg:col-span-3">
-        <Panel title="Order ticket" right={<Badge tone="amber">Simulated</Badge>}>
+        <Panel
+          title="Order ticket"
+          right={
+            <Badge tone={operatingMode === "production" ? "green" : "amber"}>
+              {operatingMode === "production" ? "Paper · live prices" : "Simulated"}
+            </Badge>
+          }
+        >
           <div className="mb-2 flex gap-1">
             <Button
               variant={side === "buy" ? "buy" : "ghost"}
@@ -414,8 +422,15 @@ export default function TradingWorkspace() {
             <div className="rounded border border-qe-border bg-qe-bg p-2 text-[11px] text-qe-muted">
               Est. value:{" "}
               <span className="font-mono text-qe-text">${estValue.toFixed(2)}</span>
-              <div>Pre-trade check: simulated PASS (prototype).</div>
-              <div className="text-qe-amber">Live brokerage submission is disabled.</div>
+              <div>
+                Pre-trade check:{" "}
+                {operatingMode === "production" ? "PASS (paper OMS, live marks)" : "simulated PASS"}
+              </div>
+              <div className="text-qe-amber">
+                {operatingMode === "production"
+                  ? "Production market data is live. Brokerage submission remains disabled (paper fills only)."
+                  : "Simulated session — sample + Coinbase when available. No live brokerage."}
+              </div>
             </div>
             {!preview ? (
               <Button variant="primary" className="w-full" onClick={() => setPreview(true)}>
@@ -424,7 +439,8 @@ export default function TradingWorkspace() {
             ) : (
               <div className="space-y-2 rounded border border-qe-amber/40 bg-qe-amber/10 p-2">
                 <p className="text-xs text-qe-text">
-                  Confirm {side.toUpperCase()} {qty} {selected.symbol} ({orderType}) — SIMULATED only
+                  Confirm {side.toUpperCase()} {qty} {selected.symbol} ({orderType}) —{" "}
+                  {operatingMode === "production" ? "PAPER (live marks)" : "SIMULATED only"}
                 </p>
                 <div className="flex gap-2">
                   <Button

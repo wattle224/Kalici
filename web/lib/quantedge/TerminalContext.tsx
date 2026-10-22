@@ -21,6 +21,7 @@ import type {
   Candle,
   ChartTimeframe,
   Instrument,
+  OperatingMode,
   OrderBook,
   Quote,
   SimulatedOrder,
@@ -29,9 +30,13 @@ import type {
   WorkspaceId,
 } from "./types";
 
+const MODE_STORAGE_KEY = "quantedge.operatingMode";
+
 interface TerminalState {
   workspace: WorkspaceId;
   setWorkspace: (w: WorkspaceId) => void;
+  operatingMode: OperatingMode;
+  setOperatingMode: (mode: OperatingMode) => void;
   selected: Instrument;
   selectSymbol: (symbol: string, opts?: { stay?: boolean }) => void;
   instruments: Instrument[];
@@ -96,6 +101,7 @@ export function TerminalProvider({
   initialProducts?: Instrument[];
 }) {
   const [workspace, setWorkspace] = useState<WorkspaceId>("trading");
+  const [operatingMode, setOperatingModeState] = useState<OperatingMode>("production");
   const [instruments, setInstruments] = useState<Instrument[]>(() =>
     initialProducts.length
       ? mergeInstruments(SAMPLE_INSTRUMENTS, initialProducts)
@@ -140,6 +146,17 @@ export function TerminalProvider({
   const [orders, setOrders] = useState<SimulatedOrder[]>([]);
   const [commandOpen, setCommandOpen] = useState(false);
 
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(MODE_STORAGE_KEY);
+      if (saved === "simulated" || saved === "production") {
+        setOperatingModeState(saved);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const findInstrument = useCallback(
     (symbol: string): Instrument => {
       const up = symbol.toUpperCase();
@@ -165,6 +182,25 @@ export function TerminalProvider({
     (symbol: string, opts?: { stay?: boolean }) => {
       setSelected(findInstrument(symbol));
       if (!opts?.stay) setWorkspace("trading");
+    },
+    [findInstrument]
+  );
+
+  const setOperatingMode = useCallback(
+    (mode: OperatingMode) => {
+      setOperatingModeState(mode);
+      try {
+        window.localStorage.setItem(MODE_STORAGE_KEY, mode);
+      } catch {
+        /* ignore */
+      }
+      if (mode === "production") {
+        setActiveWatchlistId("wl-crypto");
+        setSelected((prev) => {
+          if (prev.assetClass === "crypto" || prev.symbol.includes("-")) return prev;
+          return findInstrument(DEFAULT_SYMBOL);
+        });
+      }
     },
     [findInstrument]
   );
@@ -210,20 +246,37 @@ export function TerminalProvider({
       .filter((i) => i.assetClass === "crypto")
       .map((i) => i.symbol);
     const quoteSyms = Array.from(
-      new Set([selected.symbol, ...cryptoSyms.slice(0, 24), ...DEFAULT_WATCHLISTS.flatMap((w) => w.symbols)])
-    ).filter((s) => s.includes("-"));
+      new Set([
+        selected.symbol,
+        ...cryptoSyms.slice(0, 24),
+        ...(operatingMode === "simulated"
+          ? DEFAULT_WATCHLISTS.flatMap((w) => w.symbols)
+          : []),
+      ])
+    ).filter((s) => s.includes("-") || operatingMode === "simulated");
+
+    const prodQuoteSyms = quoteSyms.filter((s) => s.includes("-"));
 
     try {
-      const live = await coinbaseLedgerProvider.fetchQuotes(quoteSyms);
-      const merged = buildSimulatedQuotes(live);
-      // Prefer live for any crypto we have
-      const byLive = new Map(live.map((q) => [q.symbol, q]));
-      const combined = merged.map((q) => byLive.get(q.symbol) ?? q);
-      for (const q of live) {
-        if (!combined.find((c) => c.symbol === q.symbol)) combined.push(q);
+      const live = await coinbaseLedgerProvider.fetchQuotes(
+        operatingMode === "production" ? prodQuoteSyms : quoteSyms.filter((s) => s.includes("-"))
+      );
+
+      let combined: Quote[];
+      if (operatingMode === "production") {
+        // Production: live Coinbase quotes only — never mix simulated equities into the tape
+        combined = live;
+        setFeedStatus(live.length ? "connected" : "disconnected");
+      } else {
+        const merged = buildSimulatedQuotes(live);
+        const byLive = new Map(live.map((q) => [q.symbol, q]));
+        combined = merged.map((q) => byLive.get(q.symbol) ?? q);
+        for (const q of live) {
+          if (!combined.find((c) => c.symbol === q.symbol)) combined.push(q);
+        }
+        setFeedStatus(live.length ? "connected" : "degraded");
       }
       setQuotes(combined);
-      setFeedStatus(live.length ? "connected" : "degraded");
       setDataAsOf(new Date().toISOString());
 
       const isCrypto =
@@ -276,7 +329,11 @@ export function TerminalProvider({
           } else {
             setCandles([]);
             setChartStatus("empty");
-            setChartError("Coinbase returned no candles for this product.");
+            setChartError(
+              operatingMode === "production"
+                ? "Production feed: Coinbase returned no candles for this product."
+                : "Coinbase returned no candles for this product."
+            );
           }
           setBook(b);
         } catch (err) {
@@ -285,6 +342,11 @@ export function TerminalProvider({
           setChartStatus("error");
           setChartError(err instanceof Error ? err.message : String(err));
         }
+      } else if (operatingMode === "production") {
+        setCandles([]);
+        setBook(null);
+        setChartStatus("empty");
+        setChartError("Production mode supports live Coinbase crypto only. Switch security or use Simulated.");
       } else {
         setCandles([]);
         setBook(null);
@@ -293,11 +355,19 @@ export function TerminalProvider({
       }
     } catch {
       setFeedStatus("disconnected");
-      setQuotes(buildSimulatedQuotes([]));
+      if (operatingMode === "simulated") {
+        setQuotes(buildSimulatedQuotes([]));
+      } else {
+        setQuotes([]);
+      }
       setChartStatus("error");
-      setChartError("Market refresh failed");
+      setChartError(
+        operatingMode === "production"
+          ? "Production feed unavailable (Coinbase unreachable). Check network or switch to Simulated."
+          : "Market refresh failed"
+      );
     }
-  }, [selected, instruments, chartTimeframe]);
+  }, [selected, instruments, chartTimeframe, operatingMode]);
 
   useEffect(() => {
     void refreshMarket();
@@ -322,24 +392,32 @@ export function TerminalProvider({
   const { winners, losers } = useMemo(() => buildWinnersLosers(quotes), [quotes]);
 
   const tickerFreshness = useMemo(() => {
+    if (operatingMode === "production") {
+      if (feedStatus === "disconnected" || !quotes.length) return "delayed" as const;
+      const live = quotes.filter((q) => q.freshness === "live").length;
+      if (live === 0) return "delayed" as const;
+      if (live === quotes.length) return "live" as const;
+      return "mixed" as const;
+    }
     if (!quotes.length) return "simulated" as const;
     const live = quotes.filter((q) => q.freshness === "live").length;
     if (live === quotes.length) return "live" as const;
     if (live === 0) return "simulated" as const;
     return "mixed" as const;
-  }, [quotes]);
+  }, [quotes, operatingMode, feedStatus]);
 
   const placeSimulatedOrder = useCallback(
     (order: Omit<SimulatedOrder, "id" | "createdAt" | "updatedAt" | "status" | "mode">) => {
       const now = new Date().toISOString();
-      const id = `SIM-${Date.now().toString(36).toUpperCase()}`;
+      const prefix = operatingMode === "production" ? "PAPER" : "SIM";
+      const id = `${prefix}-${Date.now().toString(36).toUpperCase()}`;
       const filled: SimulatedOrder = {
         ...order,
         id,
         status: order.type === "market" ? "filled" : "open",
         createdAt: now,
         updatedAt: now,
-        mode: "simulated",
+        mode: operatingMode === "production" ? "paper" : "simulated",
         fillPrice:
           order.type === "market"
             ? order.limitPrice ?? quoteMap.get(order.symbol)?.last
@@ -347,7 +425,7 @@ export function TerminalProvider({
       };
       setOrders((prev) => [filled, ...prev]);
     },
-    [quoteMap]
+    [quoteMap, operatingMode]
   );
 
   const cancelOrder = useCallback((id: string) => {
@@ -360,9 +438,23 @@ export function TerminalProvider({
     );
   }, []);
 
+  const sessionLabel =
+    operatingMode === "production"
+      ? feedStatus === "connected"
+        ? "PRODUCTION · LIVE MARKET DATA"
+        : "PRODUCTION · FEED DOWN"
+      : "SIMULATED · PAPER SESSION";
+
+  const providerNote =
+    operatingMode === "production"
+      ? "Production mode: live Coinbase USD market data (candles, depth, quotes). Order ticket remains PAPER — no live brokerage submission."
+      : "Simulated mode: sample multi-asset quotes + Coinbase when reachable. Orders are fully simulated.";
+
   const value: TerminalState = {
     workspace,
     setWorkspace,
+    operatingMode,
+    setOperatingMode,
     selected,
     selectSymbol,
     instruments,
@@ -386,7 +478,7 @@ export function TerminalProvider({
     winners,
     losers,
     feedStatus,
-    sessionLabel: "SIM / LOCAL SESSION",
+    sessionLabel,
     dataAsOf,
     tickerFreshness,
     orders,
@@ -394,7 +486,7 @@ export function TerminalProvider({
     cancelOrder,
     commandOpen,
     setCommandOpen,
-    providerNote: coinbaseLedgerProvider.searchCoverageNote,
+    providerNote,
     refreshMarket,
   };
 

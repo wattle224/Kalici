@@ -45,6 +45,17 @@ Never treat simulated panels as live market or production risk output.
 
 See `lib/quantedge/providers.ts` and `lib/quantedge/types.ts`. Swap market-data vendors behind the provider interface without rewriting workspace UI.
 
+## Operating mode
+
+Header toggle **Simulated | Production** (persisted in `localStorage`):
+
+| Mode | Market data | Orders |
+|------|-------------|--------|
+| **Production** | Live Coinbase USD quotes/candles/depth only | Paper fills against live marks (no live brokerage) |
+| **Simulated** | Sample multi-asset + Coinbase when reachable | Fully simulated |
+
+Never labels simulated/paper fills as live brokerage.
+
 ## Keyboard
 
 - `Ctrl/Cmd+K` — command palette (instruments + workspaces)
