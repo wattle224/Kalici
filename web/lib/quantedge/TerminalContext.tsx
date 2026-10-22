@@ -62,7 +62,7 @@ interface TerminalState {
   feedStatus: "connected" | "degraded" | "disconnected";
   sessionLabel: string;
   dataAsOf: string | null;
-  tickerFreshness: "live" | "mixed" | "simulated";
+  tickerFreshness: "live" | "mixed" | "simulated" | "delayed";
   orders: SimulatedOrder[];
   placeSimulatedOrder: (
     order: Omit<SimulatedOrder, "id" | "createdAt" | "updatedAt" | "status" | "mode">
