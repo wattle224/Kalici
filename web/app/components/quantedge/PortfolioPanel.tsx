@@ -1,0 +1,191 @@
+"use client";
+
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useTerminal } from "@/lib/quantedge/TerminalContext";
+import { Badge, Button, Panel, PnL } from "./ui";
+
+interface Holding {
+  asset: string;
+  symbol: string;
+  amount: number;
+  price: number;
+  value: number;
+  currency: string;
+  source: string;
+}
+
+interface PortfolioPayload {
+  ok: boolean;
+  connected: boolean;
+  source: string;
+  holdings: Holding[];
+  totalValue: number;
+  currency: string;
+  pnl: {
+    totalBuy: number;
+    totalSell: number;
+    netBuyMinusSell: number;
+    realizedPnL: number | null;
+    currency: string;
+  };
+  asOf: string;
+  message: string;
+  error?: string;
+}
+
+function money(n: number, max = 2) {
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: max,
+  });
+}
+
+export default function PortfolioPanel() {
+  const { operatingMode, selectSymbol } = useTerminal();
+  const [data, setData] = useState<PortfolioPayload | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/coinbase/portfolio", { cache: "no-store" });
+      const json = (await res.json()) as PortfolioPayload;
+      setData(json);
+      if (!json.ok) setErr(json.error || "Portfolio unavailable");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (operatingMode !== "production") return;
+    void load();
+    const id = window.setInterval(() => void load(), 30_000);
+    return () => window.clearInterval(id);
+  }, [operatingMode, load]);
+
+  if (operatingMode !== "production") {
+    return (
+      <Panel title="Portfolio" right={<Badge tone="amber">Simulated mode</Badge>}>
+        <p className="text-xs text-qe-muted">
+          Switch to <strong className="text-qe-green">Production</strong> to load your Coinbase /
+          ledger portfolio and PnL (Total buy − Total sell).
+        </p>
+      </Panel>
+    );
+  }
+
+  const pnl = data?.pnl;
+
+  return (
+    <Panel
+      title="Portfolio — Production"
+      right={
+        <div className="flex items-center gap-2">
+          <Badge tone={data?.connected ? "green" : "amber"}>
+            {data?.source === "coinbase-exchange"
+              ? "Coinbase live"
+              : data?.source === "ledger"
+                ? "Ledger + live marks"
+                : "Not connected"}
+          </Badge>
+          <Button onClick={() => void load()} disabled={loading}>
+            {loading ? "Loading…" : "Refresh"}
+          </Button>
+        </div>
+      }
+    >
+      {err ? <p className="mb-2 text-xs text-qe-red">{err}</p> : null}
+      {data?.message ? (
+        <p className="mb-3 text-[11px] text-qe-muted">{data.message}</p>
+      ) : null}
+
+      <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+        <Stat label="Portfolio value" value={`$${money(data?.totalValue ?? 0)}`} />
+        <Stat label="Total buy" value={`$${money(pnl?.totalBuy ?? 0)}`} tone="green" />
+        <Stat label="Total sell" value={`$${money(pnl?.totalSell ?? 0)}`} tone="red" />
+        <Stat
+          label="Total (buy − sell)"
+          value={<PnL value={pnl?.netBuyMinusSell ?? 0} />}
+        />
+      </div>
+      {pnl?.realizedPnL != null ? (
+        <p className="mb-2 text-[11px] text-qe-muted">
+          Ledger realized P&amp;L (fills):{" "}
+          <PnL value={pnl.realizedPnL} />
+        </p>
+      ) : null}
+
+      {!data?.holdings?.length ? (
+        <p className="text-xs text-qe-muted">
+          No holdings yet. Configure Coinbase Exchange API view keys in{" "}
+          <code className="text-qe-text">web/.env.local</code> (
+          <code className="text-qe-text">COINBASE_API_KEY</code>,{" "}
+          <code className="text-qe-text">COINBASE_API_SECRET</code>,{" "}
+          <code className="text-qe-text">COINBASE_API_PASSPHRASE</code>) to mirror the Coinbase app
+          portfolio, or trade via the ledger so positions appear here.
+        </p>
+      ) : (
+        <div className="overflow-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="text-[10px] uppercase text-qe-muted">
+              <tr>
+                <th className="py-1">Asset</th>
+                <th>Amount</th>
+                <th>Price</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.holdings.map((h) => (
+                <tr key={h.symbol} className="border-t border-qe-border text-qe-text">
+                  <td className="py-1.5">
+                    <button
+                      type="button"
+                      className="font-mono font-semibold hover:text-qe-accent"
+                      onClick={() => {
+                        if (h.symbol.includes("-")) selectSymbol(h.symbol, { stay: true });
+                      }}
+                    >
+                      {h.asset}
+                    </button>
+                    <div className="text-[10px] text-qe-muted">{h.symbol}</div>
+                  </td>
+                  <td className="font-mono">{h.amount.toLocaleString(undefined, { maximumFractionDigits: 8 })}</td>
+                  <td className="font-mono">${money(h.price, h.price < 1 ? 6 : 2)}</td>
+                  <td className="font-mono">${money(h.value)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-2 text-[10px] text-qe-muted" suppressHydrationWarning>
+            As of {data.asOf ? new Date(data.asOf).toLocaleString("en-GB", { hour12: false }) : "—"}
+          </p>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: ReactNode;
+  tone?: "green" | "red";
+}) {
+  const color =
+    tone === "green" ? "text-qe-green" : tone === "red" ? "text-qe-red" : "text-qe-text";
+  return (
+    <div className="rounded border border-qe-border bg-qe-bg p-2">
+      <div className="text-[10px] uppercase text-qe-muted">{label}</div>
+      <div className={`mt-0.5 font-mono text-sm ${color}`}>{value}</div>
+    </div>
+  );
+}

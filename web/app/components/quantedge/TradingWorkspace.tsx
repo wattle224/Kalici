@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { TIMEFRAME_CONFIG } from "@/lib/quantedge/chartTimeframes";
 import { useTerminal } from "@/lib/quantedge/TerminalContext";
 import CandleChart from "./CandleChart";
+import PortfolioPanel from "./PortfolioPanel";
 import { Badge, Button, Field, FreshnessBadge, Input, Panel, PnL, Select } from "./ui";
 import type { OrderSide, OrderType, TimeInForce } from "@/lib/quantedge/types";
 import { CHART_TIMEFRAMES } from "@/lib/quantedge/types";
@@ -300,24 +301,8 @@ export default function TradingWorkspace() {
           </div>
         </Panel>
 
-        <div className="grid min-h-0 grid-cols-1 gap-2 md:grid-cols-2">
-          <Panel title="Market analysis">
-            <ul className="space-y-2 text-xs text-qe-text">
-              <li>
-                Trend:{" "}
-                {quote && quote.changePct >= 0
-                  ? "Constructive (window return from live candles)"
-                  : "Soft (window return from live candles)"}
-              </li>
-              <li>
-                Depth: {book ? `live mid ${book.mid?.toFixed(4) ?? "—"}` : "unavailable for this product"}
-              </li>
-              <li className="rounded border border-qe-border bg-qe-bg p-2 text-qe-muted">
-                <strong className="text-qe-amber">AI note:</strong> Use Risk workspace Analyze for
-                local QuantEdge tool (+ optional Gemini). Predictions are never certainties.
-              </li>
-            </ul>
-          </Panel>
+        <div className="grid min-h-0 grid-cols-1 gap-2 lg:grid-cols-2">
+          <PortfolioPanel />
           <Panel title="Depth / book">
             {!book ? (
               <p className="text-xs text-qe-muted">
