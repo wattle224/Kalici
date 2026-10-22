@@ -18,6 +18,11 @@ struct TradingTabView: View {
       }
       .navigationTitle("Trading")
       .toolbar {
+        ToolbarItem(placement: .topBarLeading) {
+          Button(store.isExecutionPaused ? "Resume" : "Pause") {
+            store.setExecutionPaused(!store.isExecutionPaused)
+          }
+        }
         ToolbarItem(placement: .topBarTrailing) {
           Button("Clean restart") {
             showCleanRestartConfirm = true
@@ -36,38 +41,41 @@ struct TradingTabView: View {
       } message: {
         Text("Clears the trade ledger and reloads from a clean state. Removes phantom zero-price fills.")
       }
-      .overlay {
-        if store.settledTrades.isEmpty && store.skippedTradesWhilePaused.isEmpty {
-          ContentUnavailableView(
-            "No trades yet",
-            systemImage: "arrow.left.arrow.right.circle",
-            description: Text("Confirmed fills appear here once execution runs.")
-          )
-        }
-      }
     }
     .preferredColorScheme(.dark)
   }
 
   private var executionSection: some View {
     Section {
-      HStack {
-        Image(systemName: store.isExecutionPaused ? "pause.circle.fill" : "play.circle.fill")
-          .foregroundStyle(store.isExecutionPaused ? .orange : .green)
-          .font(.title2)
-        VStack(alignment: .leading, spacing: 4) {
-          Text(store.isExecutionPaused ? "Execution paused" : "Execution running")
-            .font(.subheadline.weight(.semibold))
-          Text(
-            store.isExecutionPaused
-              ? "New orders are not sent. Trade history shows confirmed fills only."
-              : "Automation may place orders and record fill prices."
-          )
-          .font(.caption)
-          .foregroundStyle(.secondary)
+      Button {
+        store.setExecutionPaused(!store.isExecutionPaused)
+      } label: {
+        HStack {
+          Image(systemName: store.isExecutionPaused ? "pause.circle.fill" : "play.circle.fill")
+            .foregroundStyle(store.isExecutionPaused ? .orange : .green)
+            .font(.title2)
+          VStack(alignment: .leading, spacing: 4) {
+            Text(store.isExecutionPaused ? "Execution paused" : "Execution running")
+              .font(.subheadline.weight(.semibold))
+              .foregroundStyle(.primary)
+            Text(
+              store.isExecutionPaused
+                ? "Tap Resume to allow new orders. Trade history shows confirmed fills only."
+                : "Automation may place orders and record fill prices. Tap Pause to stop."
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          }
+          Spacer()
+          Text(store.isExecutionPaused ? "OFFLINE" : "ONLINE")
+            .font(.caption.weight(.bold))
+            .foregroundStyle(store.isExecutionPaused ? .orange : .green)
         }
       }
+      .buttonStyle(.plain)
       .padding(.vertical, 4)
+    } header: {
+      Text("Execution")
     }
   }
 
@@ -76,7 +84,7 @@ struct TradingTabView: View {
       VStack(alignment: .leading, spacing: 6) {
         Text(position.symbol)
           .font(.headline)
-        Text("\(NSDecimalNumber(decimal: position.quantity).stringValue) ETH · avg \(PriceFormat.string(from: position.averageEntryPrice))")
+        Text("\(NSDecimalNumber(decimal: position.quantity).stringValue) · avg \(PriceFormat.string(from: position.averageEntryPrice))")
           .font(.caption)
           .monospacedDigit()
         HStack {
@@ -100,9 +108,13 @@ struct TradingTabView: View {
   private var tradeHistorySection: some View {
     Section("Trade history") {
       if store.settledTrades.isEmpty {
-        Text("No confirmed fills")
-          .font(.caption)
-          .foregroundStyle(.secondary)
+        ContentUnavailableView(
+          "No trades yet",
+          systemImage: "arrow.left.arrow.right.circle",
+          description: Text("Confirmed fills appear here once execution runs.")
+        )
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
       } else {
         ForEach(store.settledTrades) { trade in
           TradeRow(trade: trade)

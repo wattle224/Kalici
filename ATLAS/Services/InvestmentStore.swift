@@ -18,6 +18,11 @@ final class InvestmentStore: ObservableObject {
         objectWillChange.send()
     }
 
+    func setExecutionPaused(_ paused: Bool) {
+        tradeAutomation.setExecutionPaused(paused)
+        objectWillChange.send()
+    }
+
     var isExecutionPaused: Bool {
         tradeAutomation.isExecutionPaused
     }
@@ -70,6 +75,31 @@ final class InvestmentStore: ObservableObject {
         valuations
             .filter { $0.investmentID == investmentID }
             .sorted { $0.asOfDate > $1.asOfDate }
+    }
+
+    /// Advances workflow: pending → inReview → approved → settled (cycles settled back to pending).
+    func advanceCapitalEventStatus(_ id: UUID) {
+        guard let idx = capitalEvents.firstIndex(where: { $0.id == id }) else { return }
+        capitalEvents[idx].status = nextWorkflowStatus(capitalEvents[idx].status)
+    }
+
+    func advanceValuationStatus(_ id: UUID) {
+        guard let idx = valuations.firstIndex(where: { $0.id == id }) else { return }
+        valuations[idx].status = nextWorkflowStatus(valuations[idx].status)
+    }
+
+    func advanceReportStatus(_ id: UUID) {
+        guard let idx = reports.firstIndex(where: { $0.id == id }) else { return }
+        reports[idx].status = nextWorkflowStatus(reports[idx].status)
+    }
+
+    private func nextWorkflowStatus(_ status: WorkflowStatus) -> WorkflowStatus {
+        switch status {
+        case .pending: return .inReview
+        case .inReview: return .approved
+        case .approved: return .settled
+        case .settled: return .pending
+        }
     }
 
     private func loadSampleData() {
