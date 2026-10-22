@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import {
+  buildSummary,
   coinbasePrivateConfigured,
+  enrichPnL,
   fetchCoinbaseBuySellTotals,
   fetchCoinbaseExchangePortfolio,
+  fetchUsdToGbpRate,
   type PortfolioHolding,
   type PortfolioPnL,
   type PortfolioSnapshot,
@@ -14,7 +17,19 @@ import { settledFills } from "@/lib/trading";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-function ledgerBuySellPnL(): PortfolioPnL {
+function emptyPnL(): PortfolioPnL {
+  return {
+    totalBuy: 0,
+    totalSell: 0,
+    netBuyMinusSell: 0,
+    allTimePnL: 0,
+    allTimePnLPct: null,
+    realizedPnL: null,
+    currency: "USD",
+  };
+}
+
+function ledgerBuySellPnL(): Omit<PortfolioPnL, "allTimePnL" | "allTimePnLPct"> {
   const ledger = buildLedgerResponse();
   const fills = settledFills(ledger.snapshot?.trades ?? []);
   let totalBuy = 0;
@@ -62,71 +77,71 @@ async function ledgerHoldings(): Promise<PortfolioHolding[]> {
   return out;
 }
 
+function pack(
+  holdings: PortfolioHolding[],
+  totalValue: number,
+  pnlBase: Omit<PortfolioPnL, "allTimePnL" | "allTimePnLPct">,
+  fxRate: number,
+  meta: Omit<PortfolioSnapshot, "holdings" | "totalValue" | "pnl" | "summary" | "currency">
+): PortfolioSnapshot {
+  const pnl = enrichPnL(pnlBase, totalValue);
+  return {
+    ...meta,
+    holdings,
+    totalValue,
+    currency: "USD",
+    pnl,
+    summary: buildSummary(holdings, totalValue, pnl, fxRate, "GBP"),
+  };
+}
+
 export async function GET() {
   const asOf = new Date().toISOString();
+  const fxRate = await fetchUsdToGbpRate();
 
   try {
     if (coinbasePrivateConfigured()) {
-      const [{ holdings, totalValue }, pnl] = await Promise.all([
+      const [{ holdings, totalValue }, pnlBase] = await Promise.all([
         fetchCoinbaseExchangePortfolio(),
         fetchCoinbaseBuySellTotals().catch(() => ledgerBuySellPnL()),
       ]);
-      const body: PortfolioSnapshot = {
+      const body = pack(holdings, totalValue, pnlBase, fxRate, {
         ok: true,
         connected: true,
         source: "coinbase-exchange",
-        holdings,
-        totalValue,
-        currency: "USD",
-        pnl,
         asOf,
         message:
-          "Live Coinbase Exchange balances. PnL totals from fills: Total = Total buy − Total sell.",
-      };
+          "Live Coinbase Exchange balances (shown in £ using live USD/GBP). Totals: buy, sell, buy−sell, and all-time vs net invested.",
+      });
       return NextResponse.json(body, {
         headers: { "Cache-Control": "no-store" },
       });
     }
 
-    // Fallback: IAM ledger positions + buy/sell from local trade history
     const holdings = await ledgerHoldings();
-    const pnl = ledgerBuySellPnL();
+    const pnlBase = ledgerBuySellPnL();
     const totalValue = holdings.reduce((s, h) => s + h.value, 0);
-    const body: PortfolioSnapshot = {
+    const body = pack(holdings, totalValue, pnlBase, fxRate, {
       ok: true,
       connected: false,
       source: holdings.length ? "ledger" : "none",
-      holdings,
-      totalValue,
-      currency: "USD",
-      pnl,
       asOf,
       message: holdings.length
-        ? "Coinbase private API not configured — showing IAM ledger positions with live marks. Add COINBASE_API_KEY / SECRET / PASSPHRASE to web/.env.local to mirror your Coinbase app portfolio."
-        : "Coinbase private API not configured and ledger has no open positions. Add Exchange API keys (view permission) to load your Coinbase balances in Production mode.",
-    };
+        ? "Coinbase private API not configured — IAM ledger positions with live marks (GBP display). Add COINBASE_API_KEY / SECRET / PASSPHRASE to mirror your Coinbase app (£493-style home totals)."
+        : "Add Coinbase Exchange API keys (view) in web/.env.local to load the same portfolio as your Coinbase app home (total, crypto, cash, all-time P&L).",
+    });
     return NextResponse.json(body, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (err) {
-    const body: PortfolioSnapshot = {
+    const body = pack([], 0, emptyPnL(), fxRate, {
       ok: false,
       connected: false,
       source: "none",
-      holdings: [],
-      totalValue: 0,
-      currency: "USD",
-      pnl: {
-        totalBuy: 0,
-        totalSell: 0,
-        netBuyMinusSell: 0,
-        realizedPnL: null,
-        currency: "USD",
-      },
       asOf,
       message: "Portfolio fetch failed",
       error: err instanceof Error ? err.message : String(err),
-    };
+    });
     return NextResponse.json(body, {
       status: 503,
       headers: { "Cache-Control": "no-store" },

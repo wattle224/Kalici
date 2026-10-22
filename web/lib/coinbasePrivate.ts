@@ -21,8 +21,28 @@ export interface PortfolioPnL {
   totalSell: number;
   /** totalBuy - totalSell (as requested) */
   netBuyMinusSell: number;
+  /**
+   * All-time style P&L vs net invested:
+   * totalValue - (totalBuy - totalSell)
+   */
+  allTimePnL: number;
+  allTimePnLPct: number | null;
   realizedPnL: number | null;
   currency: string;
+}
+
+export interface PortfolioSummary {
+  totalValue: number;
+  cryptoValue: number;
+  cashValue: number;
+  displayCurrency: "GBP" | "USD";
+  /** USD→display FX (1 for USD). */
+  fxRate: number;
+  totalValueDisplay: number;
+  cryptoValueDisplay: number;
+  cashValueDisplay: number;
+  allTimePnLDisplay: number;
+  allTimePnLPct: number | null;
 }
 
 export interface PortfolioSnapshot {
@@ -32,10 +52,75 @@ export interface PortfolioSnapshot {
   holdings: PortfolioHolding[];
   totalValue: number;
   currency: string;
+  summary: PortfolioSummary;
   pnl: PortfolioPnL;
   asOf: string;
   message: string;
   error?: string;
+}
+
+const CASH_ASSETS = new Set(["USD", "USDC", "USDT", "GBP", "EUR", "DAI"]);
+
+export function isCashAsset(asset: string): boolean {
+  return CASH_ASSETS.has(asset.toUpperCase());
+}
+
+export function enrichPnL(pnl: Omit<PortfolioPnL, "allTimePnL" | "allTimePnLPct">, totalValue: number): PortfolioPnL {
+  const netInvested = pnl.netBuyMinusSell;
+  const allTimePnL = totalValue - netInvested;
+  const allTimePnLPct =
+    Math.abs(netInvested) > 1e-9
+      ? (allTimePnL / Math.abs(netInvested)) * 100
+      : null;
+  return {
+    ...pnl,
+    allTimePnL,
+    allTimePnLPct: allTimePnLPct != null ? Number(allTimePnLPct.toFixed(2)) : null,
+  };
+}
+
+/** Public Coinbase retail FX: how many GBP per 1 USD. */
+export async function fetchUsdToGbpRate(): Promise<number> {
+  try {
+    const res = await fetch("https://api.coinbase.com/v2/exchange-rates?currency=USD", {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return 0.79;
+    const data = (await res.json()) as { data?: { rates?: Record<string, string> } };
+    const gbp = Number(data.data?.rates?.GBP);
+    return Number.isFinite(gbp) && gbp > 0 ? gbp : 0.79;
+  } catch {
+    return 0.79;
+  }
+}
+
+export function buildSummary(
+  holdings: PortfolioHolding[],
+  totalValue: number,
+  pnl: PortfolioPnL,
+  fxRate: number,
+  displayCurrency: "GBP" | "USD" = "GBP"
+): PortfolioSummary {
+  let cryptoValue = 0;
+  let cashValue = 0;
+  for (const h of holdings) {
+    if (isCashAsset(h.asset)) cashValue += h.value;
+    else cryptoValue += h.value;
+  }
+  const rate = displayCurrency === "GBP" ? fxRate : 1;
+  return {
+    totalValue,
+    cryptoValue,
+    cashValue,
+    displayCurrency,
+    fxRate: rate,
+    totalValueDisplay: totalValue * rate,
+    cryptoValueDisplay: cryptoValue * rate,
+    cashValueDisplay: cashValue * rate,
+    allTimePnLDisplay: pnl.allTimePnL * rate,
+    allTimePnLPct: pnl.allTimePnLPct,
+  };
 }
 
 function creds() {
@@ -138,7 +223,9 @@ export async function fetchCoinbaseExchangePortfolio(): Promise<{
 }
 
 /** Aggregate buy/sell notionals from Coinbase fills (paginated lightly). */
-export async function fetchCoinbaseBuySellTotals(): Promise<PortfolioPnL> {
+export async function fetchCoinbaseBuySellTotals(): Promise<
+  Omit<PortfolioPnL, "allTimePnL" | "allTimePnLPct">
+> {
   // Exchange fills endpoint — limit recent history
   const fills = (await signedGet("/fills?limit=1000")) as Array<Record<string, unknown>>;
   let totalBuy = 0;

@@ -21,10 +21,24 @@ interface PortfolioPayload {
   holdings: Holding[];
   totalValue: number;
   currency: string;
+  summary?: {
+    totalValue: number;
+    cryptoValue: number;
+    cashValue: number;
+    displayCurrency: "GBP" | "USD";
+    fxRate: number;
+    totalValueDisplay: number;
+    cryptoValueDisplay: number;
+    cashValueDisplay: number;
+    allTimePnLDisplay: number;
+    allTimePnLPct: number | null;
+  };
   pnl: {
     totalBuy: number;
     totalSell: number;
     netBuyMinusSell: number;
+    allTimePnL?: number;
+    allTimePnLPct?: number | null;
     realizedPnL: number | null;
     currency: string;
   };
@@ -38,6 +52,10 @@ function money(n: number, max = 2) {
     minimumFractionDigits: 2,
     maximumFractionDigits: max,
   });
+}
+
+function gbp(n: number) {
+  return `£${money(n)}`;
 }
 
 export default function PortfolioPanel() {
@@ -72,14 +90,16 @@ export default function PortfolioPanel() {
     return (
       <Panel title="Portfolio" right={<Badge tone="amber">Simulated mode</Badge>}>
         <p className="text-xs text-qe-muted">
-          Switch to <strong className="text-qe-green">Production</strong> to load your Coinbase /
-          ledger portfolio and PnL (Total buy − Total sell).
+          Switch to <strong className="text-qe-green">Production</strong> to show your Coinbase-style
+          home summary (total £, all-time P&amp;L, crypto vs cash) and buy/sell totals.
         </p>
       </Panel>
     );
   }
 
+  const summary = data?.summary;
   const pnl = data?.pnl;
+  const allPct = summary?.allTimePnLPct ?? pnl?.allTimePnLPct ?? null;
 
   return (
     <Panel
@@ -104,30 +124,67 @@ export default function PortfolioPanel() {
         <p className="mb-3 text-[11px] text-qe-muted">{data.message}</p>
       ) : null}
 
+      {/* Coinbase home-style summary */}
+      <div className="mb-3 rounded border border-qe-border bg-qe-bg p-3">
+        <div className="text-[10px] uppercase tracking-wide text-qe-muted">Total balance</div>
+        <div className="font-mono text-2xl font-semibold text-qe-text">
+          {gbp(summary?.totalValueDisplay ?? 0)}
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+          <span
+            className={
+              (summary?.allTimePnLDisplay ?? 0) >= 0 ? "text-qe-green" : "text-qe-red"
+            }
+          >
+            {(summary?.allTimePnLDisplay ?? 0) >= 0 ? "▲" : "▼"}{" "}
+            {gbp(Math.abs(summary?.allTimePnLDisplay ?? 0))}
+            {allPct != null ? ` (${Math.abs(allPct).toFixed(2)}%)` : ""} All
+          </span>
+          <span className="text-qe-muted">
+            vs net invested (buy − sell)
+          </span>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <div className="rounded border border-qe-border/80 px-2 py-1.5">
+            <div className="text-[10px] uppercase text-qe-muted">Crypto</div>
+            <div className="font-mono text-qe-text">{gbp(summary?.cryptoValueDisplay ?? 0)}</div>
+          </div>
+          <div className="rounded border border-qe-border/80 px-2 py-1.5">
+            <div className="text-[10px] uppercase text-qe-muted">Cash &amp; stablecoins</div>
+            <div className="font-mono text-qe-text">{gbp(summary?.cashValueDisplay ?? 0)}</div>
+          </div>
+        </div>
+      </div>
+
       <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
-        <Stat label="Portfolio value" value={`$${money(data?.totalValue ?? 0)}`} />
         <Stat label="Total buy" value={`$${money(pnl?.totalBuy ?? 0)}`} tone="green" />
         <Stat label="Total sell" value={`$${money(pnl?.totalSell ?? 0)}`} tone="red" />
         <Stat
           label="Total (buy − sell)"
           value={<PnL value={pnl?.netBuyMinusSell ?? 0} />}
         />
+        <Stat
+          label="All-time P&L"
+          value={
+            <span>
+              <PnL value={summary?.allTimePnLDisplay ?? pnl?.allTimePnL ?? 0} />
+              {allPct != null ? (
+                <span className="ml-1 text-[10px] text-qe-muted">({allPct.toFixed(2)}%)</span>
+              ) : null}
+            </span>
+          }
+        />
       </div>
-      {pnl?.realizedPnL != null ? (
-        <p className="mb-2 text-[11px] text-qe-muted">
-          Ledger realized P&amp;L (fills):{" "}
-          <PnL value={pnl.realizedPnL} />
-        </p>
-      ) : null}
 
       {!data?.holdings?.length ? (
         <p className="text-xs text-qe-muted">
-          No holdings yet. Configure Coinbase Exchange API view keys in{" "}
-          <code className="text-qe-text">web/.env.local</code> (
+          To mirror your Coinbase home (e.g. £493.64 / crypto £393 / cash £100), add Exchange API
+          keys with <strong>View</strong> permission to{" "}
+          <code className="text-qe-text">web/.env.local</code>:{" "}
           <code className="text-qe-text">COINBASE_API_KEY</code>,{" "}
           <code className="text-qe-text">COINBASE_API_SECRET</code>,{" "}
-          <code className="text-qe-text">COINBASE_API_PASSPHRASE</code>) to mirror the Coinbase app
-          portfolio, or trade via the ledger so positions appear here.
+          <code className="text-qe-text">COINBASE_API_PASSPHRASE</code>, then restart the web UI and
+          Refresh.
         </p>
       ) : (
         <div className="overflow-auto">
@@ -155,15 +212,20 @@ export default function PortfolioPanel() {
                     </button>
                     <div className="text-[10px] text-qe-muted">{h.symbol}</div>
                   </td>
-                  <td className="font-mono">{h.amount.toLocaleString(undefined, { maximumFractionDigits: 8 })}</td>
+                  <td className="font-mono">
+                    {h.amount.toLocaleString(undefined, { maximumFractionDigits: 8 })}
+                  </td>
                   <td className="font-mono">${money(h.price, h.price < 1 ? 6 : 2)}</td>
-                  <td className="font-mono">${money(h.value)}</td>
+                  <td className="font-mono">
+                    {gbp(h.value * (summary?.fxRate ?? 1))}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
           <p className="mt-2 text-[10px] text-qe-muted" suppressHydrationWarning>
             As of {data.asOf ? new Date(data.asOf).toLocaleString("en-GB", { hour12: false }) : "—"}
+            {summary?.fxRate ? ` · USD/GBP ${summary.fxRate.toFixed(4)}` : ""}
           </p>
         </div>
       )}
