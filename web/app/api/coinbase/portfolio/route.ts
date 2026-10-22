@@ -127,8 +127,8 @@ export async function GET() {
       source: holdings.length ? "ledger" : "none",
       asOf,
       message: holdings.length
-        ? "Coinbase private API not configured — IAM ledger positions with live marks (GBP display). Add COINBASE_API_KEY / SECRET / PASSPHRASE to mirror your Coinbase app (£493-style home totals)."
-        : "Add Coinbase Exchange API keys (view) in web/.env.local to load the same portfolio as your Coinbase app home (total, crypto, cash, all-time P&L).",
+        ? "Coinbase private API not configured (COINBASE_API_*=... placeholders are not keys). Showing IAM ledger positions with live marks. Put real Exchange View credentials in web/.env.local and restart."
+        : "Coinbase private API not configured. Put real COINBASE_API_KEY / SECRET / PASSPHRASE (not ...) in web/.env.local, restart, then Refresh to match Coinbase home.",
     });
     return NextResponse.json(body, {
       headers: { "Cache-Control": "no-store" },

@@ -52,9 +52,38 @@ Write-Host "  extracted $($folder.FullName)"
 
 Write-Host "[2/4] Installing into Desktop folder..."
 if (-not (Test-Path $dest)) { New-Item -ItemType Directory -Path $dest | Out-Null }
+
+# Keep Coinbase / Gemini secrets across reinstalls (never commit these)
+$envLocal = Join-Path $dest "web\.env.local"
+$envBackup = Join-Path $env:TEMP "kalici-web-env.local.bak"
+$hadEnvLocal = $false
+if (Test-Path -LiteralPath $envLocal) {
+  Copy-Item -LiteralPath $envLocal -Destination $envBackup -Force
+  $hadEnvLocal = $true
+  Write-Host "  preserved existing web\.env.local"
+}
+
 # Clear incomplete install but keep the folder
 Get-ChildItem -LiteralPath $dest -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 Copy-Item -Path (Join-Path $folder.FullName "*") -Destination $dest -Recurse -Force
+
+$webDir = Join-Path $dest "web"
+if (-not (Test-Path $webDir)) { New-Item -ItemType Directory -Path $webDir | Out-Null }
+$envLocal = Join-Path $webDir ".env.local"
+if ($hadEnvLocal -and (Test-Path -LiteralPath $envBackup)) {
+  Copy-Item -LiteralPath $envBackup -Destination $envLocal -Force
+  Write-Host "  restored web\.env.local"
+} elseif (-not (Test-Path -LiteralPath $envLocal)) {
+  @"
+# Local secrets only — never commit. Restart Investment-Management.bat after editing.
+# Coinbase Exchange API (View): https://exchange.coinbase.com/profile/api
+# Replace the empty values after = with your real key / secret / passphrase.
+COINBASE_API_KEY=
+COINBASE_API_SECRET=
+COINBASE_API_PASSPHRASE=
+"@ | Set-Content -LiteralPath $envLocal -Encoding ASCII
+  Write-Host "  created web\.env.local (fill COINBASE_API_* for Production portfolio)"
+}
 
 $launcher = Join-Path $dest "Investment-Management.bat"
 if (-not (Test-Path $launcher)) {
@@ -114,4 +143,9 @@ Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "`"$launcher`"" -WorkingDi
 Write-Host ""
 Write-Host "DONE. Folder should now contain Investment-Management.bat, backend\, web\, etc."
 Write-Host "App: http://127.0.0.1:3000/"
+Write-Host ""
+Write-Host "Production portfolio (live Coinbase balances):"
+Write-Host "  Edit: $envLocal"
+Write-Host "  Set COINBASE_API_KEY / SECRET / PASSPHRASE (Exchange View keys),"
+Write-Host "  then close the black windows and re-run the Desktop shortcut."
 exit 0

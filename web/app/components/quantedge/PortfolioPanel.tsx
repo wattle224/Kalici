@@ -176,15 +176,23 @@ export default function PortfolioPanel() {
         />
       </div>
 
-      {!data?.holdings?.length ? (
-        <p className="text-xs text-qe-muted">
-          To mirror your Coinbase home (e.g. £493.64 / crypto £393 / cash £100), add Exchange API
-          keys with <strong>View</strong> permission to{" "}
-          <code className="text-qe-text">web/.env.local</code>:{" "}
+      {!data?.connected ? (
+        <p className="mb-2 text-xs text-qe-amber">
+          Private Coinbase API is not loaded. The three lines with{" "}
+          <code className="text-qe-text">=...</code> are placeholders only — put real Exchange{" "}
+          <strong>View</strong> values in{" "}
+          <code className="text-qe-text">web/.env.local</code> (
           <code className="text-qe-text">COINBASE_API_KEY</code>,{" "}
           <code className="text-qe-text">COINBASE_API_SECRET</code>,{" "}
-          <code className="text-qe-text">COINBASE_API_PASSPHRASE</code>, then restart the web UI and
-          Refresh.
+          <code className="text-qe-text">COINBASE_API_PASSPHRASE</code>), restart the UI, then
+          Refresh. Until then this panel cannot match your Coinbase home (£ totals).
+        </p>
+      ) : null}
+
+      {!data?.holdings?.length ? (
+        <p className="text-xs text-qe-muted">
+          No holdings yet. After keys are set, Refresh should list the same assets as your Coinbase
+          app.
         </p>
       ) : (
         <div className="overflow-auto">
