@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Bell,
   Command,
@@ -38,6 +39,19 @@ export default function Header() {
     refreshMarket,
   } = useTerminal();
 
+  const [buildLabel, setBuildLabel] = useState<string | null>(null);
+  useEffect(() => {
+    void fetch("/qe-build.json", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { label?: string; id?: string; commit?: string } | null) => {
+        if (!j) return;
+        setBuildLabel([j.label || j.id, j.commit].filter(Boolean).join(" · "));
+      })
+      .catch(() => {
+        /* older installs have no build file */
+      });
+  }, []);
+
   return (
     <header className="shrink-0 border-b border-qe-border bg-qe-panel">
       <div className="flex items-center gap-3 px-3 py-2">
@@ -50,7 +64,13 @@ export default function Header() {
               QuantEdge Terminal
             </div>
             <div className="text-[10px] uppercase tracking-[0.12em] text-qe-muted">
-              Institutional AI Trading
+              {buildLabel ? (
+                <span className="normal-case tracking-normal text-qe-accent">
+                  Build: {buildLabel}
+                </span>
+              ) : (
+                "Institutional AI Trading"
+              )}
             </div>
           </div>
         </div>

@@ -7,6 +7,8 @@ $dest = Join-Path $env:USERPROFILE "Desktop\Investment Management"
 $zip = Join-Path $env:TEMP "kalici-im-install.zip"
 $extract = Join-Path $env:TEMP "kalici-im-extract"
 $urls = @(
+  "https://codeload.github.com/wattle224/Kalici/zip/refs/heads/cursor/quantedge-auto-trade-ae22",
+  "https://github.com/wattle224/Kalici/archive/refs/heads/cursor/quantedge-auto-trade-ae22.zip",
   "https://codeload.github.com/wattle224/Kalici/zip/refs/heads/cursor/quantedge-ui-live-ae22",
   "https://github.com/wattle224/Kalici/archive/refs/heads/cursor/quantedge-ui-live-ae22.zip",
   "https://codeload.github.com/wattle224/Kalici/zip/refs/heads/cursor/fix-onedrive-shortcut-ae22",

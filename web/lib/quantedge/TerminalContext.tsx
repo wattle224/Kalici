@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -15,6 +16,14 @@ import {
   DEFAULT_WATCHLISTS,
   INSTRUMENTS as SAMPLE_INSTRUMENTS,
 } from "./sampleData";
+import {
+  DEFAULT_PAPER_CASH_USD,
+  decideAutoTrade,
+  kickstartAutoBuy,
+  rebuildLedger,
+  type AutoDecision,
+  type PaperLedger,
+} from "./autoTrader";
 import { prepareCandlesForTimeframe, TIMEFRAME_CONFIG } from "./chartTimeframes";
 import { coinbaseLedgerProvider, DEFAULT_SYMBOL } from "./providers";
 import type {
@@ -31,6 +40,9 @@ import type {
 } from "./types";
 
 const MODE_STORAGE_KEY = "quantedge.operatingMode";
+const AUTO_STORAGE_KEY = "quantedge.autoTradeEnabled";
+const PAPER_CASH_KEY = "quantedge.paperStartingCash";
+const ORDERS_STORAGE_KEY = "quantedge.paperOrders";
 
 interface TerminalState {
   workspace: WorkspaceId;
@@ -72,6 +84,15 @@ interface TerminalState {
   setCommandOpen: (v: boolean) => void;
   providerNote: string;
   refreshMarket: () => Promise<void>;
+  /** Auto buys/sells from local findings + funds (paper only). */
+  autoTradeEnabled: boolean;
+  setAutoTradeEnabled: (on: boolean) => void;
+  paperStartingCash: number;
+  setPaperStartingCash: (n: number) => void;
+  paperLedger: PaperLedger;
+  lastAutoDecision: AutoDecision | null;
+  autoDecisionLog: AutoDecision[];
+  runAutoDecisionNow: (opts?: { kickstart?: boolean }) => void;
 }
 
 const Ctx = createContext<TerminalState | null>(null);
@@ -145,6 +166,12 @@ export function TerminalProvider({
   const [dataAsOf, setDataAsOf] = useState<string | null>(null);
   const [orders, setOrders] = useState<SimulatedOrder[]>([]);
   const [commandOpen, setCommandOpen] = useState(false);
+  const [autoTradeEnabled, setAutoTradeEnabledState] = useState(false);
+  const [paperStartingCash, setPaperStartingCashState] =
+    useState(DEFAULT_PAPER_CASH_USD);
+  const [lastAutoDecision, setLastAutoDecision] = useState<AutoDecision | null>(null);
+  const [autoDecisionLog, setAutoDecisionLog] = useState<AutoDecision[]>([]);
+  const [ordersHydrated, setOrdersHydrated] = useState(false);
 
   useEffect(() => {
     try {
@@ -152,6 +179,48 @@ export function TerminalProvider({
       if (saved === "simulated" || saved === "production") {
         setOperatingModeState(saved);
       }
+      const auto = window.localStorage.getItem(AUTO_STORAGE_KEY);
+      if (auto === "1" || auto === "true") setAutoTradeEnabledState(true);
+      const cash = window.localStorage.getItem(PAPER_CASH_KEY);
+      if (cash) {
+        const n = Number(cash);
+        if (Number.isFinite(n) && n > 0) setPaperStartingCashState(n);
+      }
+      const rawOrders = window.localStorage.getItem(ORDERS_STORAGE_KEY);
+      if (rawOrders) {
+        const parsed = JSON.parse(rawOrders) as SimulatedOrder[];
+        if (Array.isArray(parsed) && parsed.length) setOrders(parsed);
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setOrdersHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!ordersHydrated) return;
+    try {
+      window.localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders.slice(0, 100)));
+    } catch {
+      /* ignore */
+    }
+  }, [orders, ordersHydrated]);
+
+  const setAutoTradeEnabled = useCallback((on: boolean) => {
+    setAutoTradeEnabledState(on);
+    try {
+      window.localStorage.setItem(AUTO_STORAGE_KEY, on ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const setPaperStartingCash = useCallback((n: number) => {
+    const v = Number.isFinite(n) && n > 0 ? n : DEFAULT_PAPER_CASH_USD;
+    setPaperStartingCashState(v);
+    try {
+      window.localStorage.setItem(PAPER_CASH_KEY, String(v));
     } catch {
       /* ignore */
     }
@@ -406,11 +475,24 @@ export function TerminalProvider({
     return "mixed" as const;
   }, [quotes, operatingMode, feedStatus]);
 
+  const paperLedger = useMemo(
+    () => rebuildLedger(paperStartingCash, orders, quoteMap),
+    [paperStartingCash, orders, quoteMap]
+  );
+
   const placeSimulatedOrder = useCallback(
     (order: Omit<SimulatedOrder, "id" | "createdAt" | "updatedAt" | "status" | "mode">) => {
       const now = new Date().toISOString();
-      const prefix = operatingMode === "production" ? "PAPER" : "SIM";
+      const prefix =
+        order.source === "auto"
+          ? operatingMode === "production"
+            ? "AUTO"
+            : "ASIM"
+          : operatingMode === "production"
+            ? "PAPER"
+            : "SIM";
       const id = `${prefix}-${Date.now().toString(36).toUpperCase()}`;
+      const mark = order.limitPrice ?? quoteMap.get(order.symbol)?.last;
       const filled: SimulatedOrder = {
         ...order,
         id,
@@ -418,10 +500,8 @@ export function TerminalProvider({
         createdAt: now,
         updatedAt: now,
         mode: operatingMode === "production" ? "paper" : "simulated",
-        fillPrice:
-          order.type === "market"
-            ? order.limitPrice ?? quoteMap.get(order.symbol)?.last
-            : undefined,
+        source: order.source ?? "manual",
+        fillPrice: order.type === "market" ? mark : undefined,
       };
       setOrders((prev) => [filled, ...prev]);
     },
@@ -438,17 +518,127 @@ export function TerminalProvider({
     );
   }, []);
 
+  const autoCtxRef = useRef({
+    selectedSymbol: selected.symbol,
+    candles,
+    quoteMap,
+    orders,
+    paperStartingCash,
+    paperLedger,
+    placeSimulatedOrder,
+  });
+  autoCtxRef.current = {
+    selectedSymbol: selected.symbol,
+    candles,
+    quoteMap,
+    orders,
+    paperStartingCash,
+    paperLedger,
+    placeSimulatedOrder,
+  };
+  const lastAutoTradeAtRef = useRef(0);
+
+  const runAutoDecisionNow = useCallback((opts?: { kickstart?: boolean }) => {
+    const ctx = autoCtxRef.current;
+    const ledgerLive = rebuildLedger(ctx.paperStartingCash, ctx.orders, ctx.quoteMap);
+    const quote = ctx.quoteMap.get(ctx.selectedSymbol);
+
+    let decision: AutoDecision;
+    if (opts?.kickstart) {
+      decision =
+        kickstartAutoBuy({
+          symbol: ctx.selectedSymbol,
+          candles: ctx.candles,
+          quote,
+          ledger: ledgerLive,
+        }) ??
+        decideAutoTrade({
+          symbol: ctx.selectedSymbol,
+          candles: ctx.candles,
+          quote,
+          ledger: ledgerLive,
+          startingCash: ctx.paperStartingCash,
+        });
+    } else {
+      decision = decideAutoTrade({
+        symbol: ctx.selectedSymbol,
+        candles: ctx.candles,
+        quote,
+        ledger: ledgerLive,
+        startingCash: ctx.paperStartingCash,
+      });
+    }
+
+    setLastAutoDecision(decision);
+    setAutoDecisionLog((prev) => [decision, ...prev].slice(0, 40));
+
+    if (decision.action === "hold" || !decision.side || !(decision.quantity > 0)) {
+      return;
+    }
+
+    // Cooldown so one signal does not spam fills (kickstart bypasses once)
+    const nowMs = Date.now();
+    if (!opts?.kickstart && nowMs - lastAutoTradeAtRef.current < 20_000) return;
+
+    if (decision.action === "sell") {
+      const pos = ledgerLive.positions.find((p) => p.symbol === decision.symbol);
+      if (!pos || pos.unrealizedPnl < 0) return;
+    }
+    if (decision.action === "buy") {
+      const cost = decision.quantity * decision.price;
+      if (cost > ledgerLive.cash) return;
+    }
+
+    lastAutoTradeAtRef.current = nowMs;
+    ctx.placeSimulatedOrder({
+      symbol: decision.symbol,
+      side: decision.side,
+      type: "market",
+      quantity: decision.quantity,
+      limitPrice: decision.price,
+      tif: "ioc",
+      estimatedValue: decision.notional,
+      source: "auto",
+      rationale: decision.rationale.join(" "),
+    });
+  }, []);
+
+  // When Auto is turned on, kickstart a paper fill so Orders & fills populate
+  const prevAutoRef = useRef(false);
+  useEffect(() => {
+    if (autoTradeEnabled && !prevAutoRef.current && chartStatus === "ready") {
+      runAutoDecisionNow({ kickstart: true });
+    }
+    prevAutoRef.current = autoTradeEnabled;
+  }, [autoTradeEnabled, chartStatus, selected.symbol, runAutoDecisionNow]);
+
+  // Auto loop: decide from findings on an interval while enabled
+  useEffect(() => {
+    if (!autoTradeEnabled) return;
+    if (chartStatus !== "ready") return;
+    const tick = () => {
+      if (autoCtxRef.current.candles.length < 8) return;
+      runAutoDecisionNow();
+    };
+    const id = window.setInterval(tick, 45_000);
+    return () => window.clearInterval(id);
+  }, [autoTradeEnabled, chartStatus, selected.symbol, chartTimeframe, runAutoDecisionNow]);
+
   const sessionLabel =
     operatingMode === "production"
       ? feedStatus === "connected"
-        ? "PRODUCTION · LIVE MARKET DATA"
+        ? autoTradeEnabled
+          ? "PRODUCTION · AUTO PAPER"
+          : "PRODUCTION · LIVE MARKET DATA"
         : "PRODUCTION · FEED DOWN"
-      : "SIMULATED · PAPER SESSION";
+      : autoTradeEnabled
+        ? "SIMULATED · AUTO ON"
+        : "SIMULATED · PAPER SESSION";
 
   const providerNote =
     operatingMode === "production"
-      ? "Production mode: live Coinbase USD market data (candles, depth, quotes). Order ticket remains PAPER — no live brokerage submission."
-      : "Simulated mode: sample multi-asset quotes + Coinbase when reachable. Orders are fully simulated.";
+      ? "Production mode: live Coinbase USD market data. Auto & ticket fills stay PAPER — no live brokerage submission. Auto only sells when unrealized ≥ take-profit (positive realized)."
+      : "Simulated mode: sample + Coinbase when reachable. Auto trades from local findings + funds; paper fills only.";
 
   const value: TerminalState = {
     workspace,
@@ -488,6 +678,14 @@ export function TerminalProvider({
     setCommandOpen,
     providerNote,
     refreshMarket,
+    autoTradeEnabled,
+    setAutoTradeEnabled,
+    paperStartingCash,
+    setPaperStartingCash,
+    paperLedger,
+    lastAutoDecision,
+    autoDecisionLog,
+    runAutoDecisionNow,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

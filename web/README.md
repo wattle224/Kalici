@@ -54,6 +54,8 @@ Header toggle **Simulated | Production** (persisted in `localStorage`):
 | **Production** | Live Coinbase USD quotes/candles/depth; portfolio panel | Paper fills against live marks (no live brokerage) |
 | **Simulated** | Sample multi-asset + Coinbase when reachable | Fully simulated |
 
+**Auto decision engine (Trading workspace):** Start Auto to buy/sell from local findings (regime, momentum, RSI), sized to paper cash with a reserve. Auto **only sells when unrealized ≥ take-profit**, so realized auto exits stay positive; marks can still draw down while holding. Fills remain paper — not live brokerage.
+
 **Portfolio (Production):** Asset / Amount / Price / Value plus **Total buy**, **Total sell**, and **Total = buy − sell**.  
 With `COINBASE_API_KEY` + `SECRET` + `PASSPHRASE` in `web/.env.local`, balances come from your Coinbase Exchange account. Without keys, the panel uses IAM ledger positions + live marks and ledger fill totals.
 
