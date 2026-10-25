@@ -1,99 +1,61 @@
 @echo off
 setlocal EnableExtensions
-title Restart localhost:3000 (fresh web UI)
+title Restart QuantEdge web UI only
 color 0B
 
+REM Restarts Next on :3000 from THIS folder.
+REM Does NOT download new code from GitHub.
+REM If you do not see "Build: Auto decision engine", run REINSTALL-AUTO-TRADE.bat instead.
+
+set "ROOT=%~dp0"
+set "WEB=%ROOT%web"
+
 echo.
-echo  Restart web UI on http://localhost:3000/
-echo  ========================================
+echo  Restarting web UI from:
+echo    %WEB%
 echo.
 
-REM Kill whatever is holding port 3000 (stale Next/Vite/old build)
-for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":3000" ^| findstr "LISTENING"') do (
-  echo  Stopping PID %%P on port 3000...
-  taskkill /F /PID %%P >nul 2>&1
-)
-
-timeout /t 2 /nobreak >nul
-
-set "ROOT="
-if exist "%~dp0web\package.json" set "ROOT=%~dp0"
-if not defined ROOT if exist "%USERPROFILE%\Desktop\Kalici\web\package.json" set "ROOT=%USERPROFILE%\Desktop\Kalici\"
-if not defined ROOT if exist "%USERPROFILE%\projects\Investment Management\frontend\package.json" set "ROOT=%USERPROFILE%\projects\Investment Management\"
-if not defined ROOT if exist "%USERPROFILE%\projects\Investment Management\web\package.json" set "ROOT=%USERPROFILE%\projects\Investment Management\"
-
-if "%~1" neq "" set "ROOT=%~1"
-
-if not defined ROOT (
+if not exist "%WEB%\package.json" (
   color 0C
-  echo  Could not find a web UI folder.
-  echo  Drag your Kalici or Investment Management folder onto this .bat
+  echo  [FAIL] web\package.json missing. Run REINSTALL-AUTO-TRADE.bat first.
   pause
   exit /b 1
 )
 
-if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
-echo  Project: %ROOT%
-echo.
-
-where node >nul 2>&1
-if errorlevel 1 (
-  echo  Node.js missing — install from https://nodejs.org/
-  pause
-  exit /b 1
+if not exist "%WEB%\public\qe-build.json" (
+  color 0E
+  echo  [WARN] No qe-build.json — this folder is an OLD build without Auto.
+  echo         Ctrl+F5 / restart cannot add Auto. Run REINSTALL-AUTO-TRADE.bat.
+  echo.
 )
 
-REM Prefer Kalici web/, else frontend/, else package.json at root
-set "WEB="
-if exist "%ROOT%\web\package.json" set "WEB=%ROOT%\web"
-if not defined WEB if exist "%ROOT%\frontend\package.json" set "WEB=%ROOT%\frontend"
-if not defined WEB if exist "%ROOT%\package.json" set "WEB=%ROOT%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$ErrorActionPreference='SilentlyContinue'; Get-NetTCPConnection -LocalPort 3000 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }"
 
-if not defined WEB (
-  color 0C
-  echo  No package.json web app found under %ROOT%
-  pause
-  exit /b 1
-)
+if exist "%WEB%\.next" rmdir /s /q "%WEB%\.next" 2>nul
 
-echo  Web folder: %WEB%
-cd /d "%WEB%"
+start "IM Web :3000 — KEEP OPEN" /D "%WEB%" cmd /k npm.cmd run dev
 
-if not exist "node_modules" (
-  echo  npm install...
-  call npm install
-)
-
-REM Clear Next.js cache so the page is not stale
-if exist ".next" (
-  echo  Clearing .next cache...
-  rmdir /s /q ".next" 2>nul
-)
-
-echo  Starting fresh web UI...
-start "Web UI :3000 - KEEP OPEN" /D "%WEB%" cmd /k npm run dev
-
-echo  Waiting for http://localhost:3000 ...
-set OK=0
+echo  Waiting for http://127.0.0.1:3000/ ...
+set "OK=0"
 for /L %%i in (1,1,40) do (
   powershell -NoProfile -Command "try{(Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:3000/' -TimeoutSec 2).StatusCode}catch{exit 1}" >nul 2>&1
-  if not errorlevel 1 set OK=1 & goto ready
+  if not errorlevel 1 set "OK=1" & goto ready
   timeout /t 1 /nobreak >nul
 )
 :ready
-
 if "%OK%"=="0" (
   color 0C
-  echo  Web UI did not start. Check the "Web UI :3000" window for errors.
+  echo  [FAIL] Web did not come up. Check the black "IM Web :3000" window.
   pause
   exit /b 1
 )
 
 color 0A
+echo  [OK] http://127.0.0.1:3000/
+echo  Hard-refresh the browser (Ctrl+F5).
+echo  Look under the QE logo for: Build: Auto decision engine
+echo  If that line is missing, this folder is still old — run REINSTALL-AUTO-TRADE.bat
 echo.
-echo  READY — open a hard refresh in the browser:
-echo    http://localhost:3000/
-echo  Press Ctrl+F5 (or Ctrl+Shift+R) to bypass cache.
-echo.
-start http://localhost:3000/
 pause
+exit /b 0

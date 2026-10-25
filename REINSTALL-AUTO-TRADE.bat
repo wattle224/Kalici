@@ -34,7 +34,9 @@ echo.
 if "%RC%"=="0" (
   color 0A
   echo  [OK] Open http://127.0.0.1:3000/  then Ctrl+F5
+  echo  Under the QE logo you should see: Build: Auto decision engine
   echo  Trading ^& Analysis — right column — "Auto decision engine"
+  echo  Then click Start Auto — Orders ^& fills should populate.
 ) else (
   color 0C
   echo  [FAIL] Install exited with code %RC%
