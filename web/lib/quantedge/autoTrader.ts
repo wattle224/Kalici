@@ -25,7 +25,7 @@ export const MAX_BUY_EQUITY_FRAC = 0.2;
 export const CASH_RESERVE_FRAC = 0.15;
 
 /** Minimum confidence from local regime tool to enter. */
-export const MIN_ENTRY_CONFIDENCE = 0.55;
+export const MIN_ENTRY_CONFIDENCE = 0.45;
 
 export type AutoDecisionAction = "buy" | "sell" | "hold";
 
@@ -206,12 +206,10 @@ export function decideAutoTrade(input: {
   const bullish =
     regime === "trending_up" ||
     regime === "risk_on" ||
-    (regime === "low_vol" && (mom ?? 0) > 2);
+    regime === "low_vol" ||
+    (regime === "range" && ((mom ?? 0) > 0 || analysis.facts.changePct > 0));
 
-  const blockedRegime =
-    regime === "trending_down" ||
-    regime === "risk_off" ||
-    regime === "high_vol";
+  const blockedRegime = regime === "trending_down" || regime === "risk_off";
 
   if (blockedRegime) {
     return hold([
@@ -278,5 +276,54 @@ export function decideAutoTrade(input: {
       `Funds: cash $${ledger.cash.toFixed(2)} → remaining ~$${(ledger.cash - quantity * price).toFixed(2)}.`,
       `Exit rule: sell only when unrealized ≥ +${MIN_TAKE_PROFIT_PCT}% (positive realized return).`,
     ].filter(Boolean),
+  };
+}
+
+/**
+ * First fill when Auto is turned on — seeds Orders & fills with a sized paper buy
+ * so the blotter is never empty after Start Auto (when cash + price exist).
+ * Still respects cash reserve / equity cap; exit remains take-profit only.
+ */
+export function kickstartAutoBuy(input: {
+  symbol: string;
+  candles: Candle[];
+  quote: Quote | undefined;
+  ledger: PaperLedger;
+}): AutoDecision | null {
+  const decision = decideAutoTrade({
+    ...input,
+    startingCash: input.ledger.cash,
+  });
+  if (decision.action === "buy") return decision;
+
+  // If findings said hold but we have cash and no position, seed a small long
+  // so Auto session activity appears in Orders & fills immediately.
+  const price = input.quote?.last || decision.price || 0;
+  const posQty =
+    input.ledger.positions.find((p) => p.symbol === input.symbol)?.quantity ?? 0;
+  if (!(price > 0) || posQty > 0) return null;
+
+  const equity =
+    input.ledger.cash +
+    input.ledger.positions.reduce((s, p) => s + p.quantity * p.marketPrice, 0);
+  const spendable = Math.max(0, input.ledger.cash * (1 - CASH_RESERVE_FRAC));
+  const notional = Math.min(spendable, equity * MAX_BUY_EQUITY_FRAC);
+  if (notional < 5) return null;
+  const quantity = Number((notional / price).toFixed(8));
+  if (!(quantity > 0)) return null;
+
+  return {
+    ...decision,
+    action: "buy",
+    side: "buy",
+    quantity,
+    price,
+    notional: quantity * price,
+    rationale: [
+      "Auto kickstart: seed paper buy so Orders & fills populate.",
+      `Findings were "${decision.action}" (${decision.analysis.regime.label}); position opened under positive-return exit rule.`,
+      `Sized $${(quantity * price).toFixed(2)} from available cash (reserve kept).`,
+      `Will sell only when unrealized ≥ +${MIN_TAKE_PROFIT_PCT}%.`,
+    ],
   };
 }

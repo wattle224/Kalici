@@ -57,7 +57,9 @@ export default function AutoTradePanel() {
         >
           {autoTradeEnabled ? "Stop Auto" : "Start Auto"}
         </Button>
-        <Button onClick={() => runAutoDecisionNow()}>Decide now</Button>
+        <Button onClick={() => runAutoDecisionNow({ kickstart: true })}>
+          Decide now
+        </Button>
         <Field label="Starting cash ($)">
           <Input
             className="w-28"

@@ -19,6 +19,7 @@ import {
 import {
   DEFAULT_PAPER_CASH_USD,
   decideAutoTrade,
+  kickstartAutoBuy,
   rebuildLedger,
   type AutoDecision,
   type PaperLedger,
@@ -41,6 +42,7 @@ import type {
 const MODE_STORAGE_KEY = "quantedge.operatingMode";
 const AUTO_STORAGE_KEY = "quantedge.autoTradeEnabled";
 const PAPER_CASH_KEY = "quantedge.paperStartingCash";
+const ORDERS_STORAGE_KEY = "quantedge.paperOrders";
 
 interface TerminalState {
   workspace: WorkspaceId;
@@ -90,7 +92,7 @@ interface TerminalState {
   paperLedger: PaperLedger;
   lastAutoDecision: AutoDecision | null;
   autoDecisionLog: AutoDecision[];
-  runAutoDecisionNow: () => void;
+  runAutoDecisionNow: (opts?: { kickstart?: boolean }) => void;
 }
 
 const Ctx = createContext<TerminalState | null>(null);
@@ -169,6 +171,7 @@ export function TerminalProvider({
     useState(DEFAULT_PAPER_CASH_USD);
   const [lastAutoDecision, setLastAutoDecision] = useState<AutoDecision | null>(null);
   const [autoDecisionLog, setAutoDecisionLog] = useState<AutoDecision[]>([]);
+  const [ordersHydrated, setOrdersHydrated] = useState(false);
 
   useEffect(() => {
     try {
@@ -183,10 +186,26 @@ export function TerminalProvider({
         const n = Number(cash);
         if (Number.isFinite(n) && n > 0) setPaperStartingCashState(n);
       }
+      const rawOrders = window.localStorage.getItem(ORDERS_STORAGE_KEY);
+      if (rawOrders) {
+        const parsed = JSON.parse(rawOrders) as SimulatedOrder[];
+        if (Array.isArray(parsed) && parsed.length) setOrders(parsed);
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setOrdersHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!ordersHydrated) return;
+    try {
+      window.localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders.slice(0, 100)));
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [orders, ordersHydrated]);
 
   const setAutoTradeEnabled = useCallback((on: boolean) => {
     setAutoTradeEnabledState(on);
@@ -519,15 +538,37 @@ export function TerminalProvider({
   };
   const lastAutoTradeAtRef = useRef(0);
 
-  const runAutoDecisionNow = useCallback(() => {
+  const runAutoDecisionNow = useCallback((opts?: { kickstart?: boolean }) => {
     const ctx = autoCtxRef.current;
-    const decision = decideAutoTrade({
-      symbol: ctx.selectedSymbol,
-      candles: ctx.candles,
-      quote: ctx.quoteMap.get(ctx.selectedSymbol),
-      ledger: rebuildLedger(ctx.paperStartingCash, ctx.orders, ctx.quoteMap),
-      startingCash: ctx.paperStartingCash,
-    });
+    const ledgerLive = rebuildLedger(ctx.paperStartingCash, ctx.orders, ctx.quoteMap);
+    const quote = ctx.quoteMap.get(ctx.selectedSymbol);
+
+    let decision: AutoDecision;
+    if (opts?.kickstart) {
+      decision =
+        kickstartAutoBuy({
+          symbol: ctx.selectedSymbol,
+          candles: ctx.candles,
+          quote,
+          ledger: ledgerLive,
+        }) ??
+        decideAutoTrade({
+          symbol: ctx.selectedSymbol,
+          candles: ctx.candles,
+          quote,
+          ledger: ledgerLive,
+          startingCash: ctx.paperStartingCash,
+        });
+    } else {
+      decision = decideAutoTrade({
+        symbol: ctx.selectedSymbol,
+        candles: ctx.candles,
+        quote,
+        ledger: ledgerLive,
+        startingCash: ctx.paperStartingCash,
+      });
+    }
+
     setLastAutoDecision(decision);
     setAutoDecisionLog((prev) => [decision, ...prev].slice(0, 40));
 
@@ -535,18 +576,17 @@ export function TerminalProvider({
       return;
     }
 
-    // Cooldown so one signal does not spam fills
+    // Cooldown so one signal does not spam fills (kickstart bypasses once)
     const nowMs = Date.now();
-    if (nowMs - lastAutoTradeAtRef.current < 20_000) return;
+    if (!opts?.kickstart && nowMs - lastAutoTradeAtRef.current < 20_000) return;
 
-    const ledger = ctx.paperLedger;
     if (decision.action === "sell") {
-      const pos = ledger.positions.find((p) => p.symbol === decision.symbol);
+      const pos = ledgerLive.positions.find((p) => p.symbol === decision.symbol);
       if (!pos || pos.unrealizedPnl < 0) return;
     }
     if (decision.action === "buy") {
       const cost = decision.quantity * decision.price;
-      if (cost > ledger.cash) return;
+      if (cost > ledgerLive.cash) return;
     }
 
     lastAutoTradeAtRef.current = nowMs;
@@ -563,6 +603,15 @@ export function TerminalProvider({
     });
   }, []);
 
+  // When Auto is turned on, kickstart a paper fill so Orders & fills populate
+  const prevAutoRef = useRef(false);
+  useEffect(() => {
+    if (autoTradeEnabled && !prevAutoRef.current && chartStatus === "ready") {
+      runAutoDecisionNow({ kickstart: true });
+    }
+    prevAutoRef.current = autoTradeEnabled;
+  }, [autoTradeEnabled, chartStatus, selected.symbol, runAutoDecisionNow]);
+
   // Auto loop: decide from findings on an interval while enabled
   useEffect(() => {
     if (!autoTradeEnabled) return;
@@ -571,7 +620,6 @@ export function TerminalProvider({
       if (autoCtxRef.current.candles.length < 8) return;
       runAutoDecisionNow();
     };
-    tick();
     const id = window.setInterval(tick, 45_000);
     return () => window.clearInterval(id);
   }, [autoTradeEnabled, chartStatus, selected.symbol, chartTimeframe, runAutoDecisionNow]);

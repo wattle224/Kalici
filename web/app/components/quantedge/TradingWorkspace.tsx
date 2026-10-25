@@ -446,31 +446,58 @@ export default function TradingWorkspace() {
           </div>
         </Panel>
 
-        <Panel title="Orders & fills" className="min-h-[180px] flex-1">
+        <Panel
+          title="Orders & fills"
+          className="min-h-[180px] flex-1"
+          right={
+            <Badge tone={orders.length ? "green" : "amber"}>
+              {orders.length ? `${orders.length} fills` : "empty"}
+            </Badge>
+          }
+        >
           {orders.length === 0 ? (
-            <p className="text-xs text-qe-muted">No simulated orders yet.</p>
+            <p className="text-xs text-qe-muted">
+              No fills yet. Click <strong className="text-qe-text">Start Auto</strong> above to
+              seed a paper buy from available funds, or Confirm a ticket order.
+            </p>
           ) : (
             <table className="w-full text-left text-[11px]">
               <thead className="text-qe-muted">
                 <tr>
-                  <th className="py-1">ID</th>
+                  <th className="py-1">Time</th>
+                  <th>Src</th>
+                  <th>Sym</th>
                   <th>Side</th>
                   <th>Qty</th>
+                  <th>Fill</th>
                   <th>Status</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
-                {orders.slice(0, 12).map((o) => (
-                  <tr key={o.id} className="border-t border-qe-border font-mono text-qe-text">
-                    <td className="py-1" title={o.rationale}>
-                      {o.id.slice(-6)}
-                      {o.source === "auto" ? (
-                        <span className="ml-1 text-qe-accent">A</span>
-                      ) : null}
+                {orders.slice(0, 20).map((o) => (
+                  <tr
+                    key={o.id}
+                    className="border-t border-qe-border font-mono text-qe-text"
+                    title={o.rationale}
+                  >
+                    <td className="py-1 text-qe-muted">
+                      {new Date(o.createdAt).toLocaleTimeString("en-GB", { hour12: false })}
                     </td>
-                    <td className={o.side === "buy" ? "text-qe-green" : "text-qe-red"}>{o.side}</td>
-                    <td>{o.quantity}</td>
+                    <td className={o.source === "auto" ? "text-qe-accent" : "text-qe-muted"}>
+                      {o.source === "auto" ? "AUTO" : "MAN"}
+                    </td>
+                    <td>{o.symbol}</td>
+                    <td className={o.side === "buy" ? "text-qe-green" : "text-qe-red"}>
+                      {o.side}
+                    </td>
+                    <td>{Number(o.quantity.toPrecision(6))}</td>
+                    <td>
+                      $
+                      {(o.fillPrice ?? o.limitPrice ?? 0).toLocaleString(undefined, {
+                        maximumFractionDigits: 4,
+                      })}
+                    </td>
                     <td>{o.status}</td>
                     <td>
                       {o.status === "open" ? (
