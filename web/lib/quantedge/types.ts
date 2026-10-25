@@ -104,6 +104,10 @@ export interface SimulatedOrder {
   estimatedValue: number;
   /** simulated = full paper/sim stack; paper = live market data, non-broker fills */
   mode: "simulated" | "paper";
+  /** Who initiated the fill */
+  source?: "manual" | "auto";
+  /** Auto rationale or ticket note */
+  rationale?: string;
 }
 
 export interface Position {

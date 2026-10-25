@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { TIMEFRAME_CONFIG } from "@/lib/quantedge/chartTimeframes";
 import { useTerminal } from "@/lib/quantedge/TerminalContext";
+import AutoTradePanel from "./AutoTradePanel";
 import CandleChart from "./CandleChart";
 import PortfolioPanel from "./PortfolioPanel";
 import { Badge, Button, Field, FreshnessBadge, Input, Panel, PnL, Select } from "./ui";
@@ -339,6 +340,7 @@ export default function TradingWorkspace() {
       </div>
 
       <aside className="col-span-12 flex min-h-0 flex-col gap-2 lg:col-span-3">
+        <AutoTradePanel />
         <Panel
           title="Order ticket"
           right={
@@ -461,7 +463,12 @@ export default function TradingWorkspace() {
               <tbody>
                 {orders.slice(0, 12).map((o) => (
                   <tr key={o.id} className="border-t border-qe-border font-mono text-qe-text">
-                    <td className="py-1">{o.id.slice(-6)}</td>
+                    <td className="py-1" title={o.rationale}>
+                      {o.id.slice(-6)}
+                      {o.source === "auto" ? (
+                        <span className="ml-1 text-qe-accent">A</span>
+                      ) : null}
+                    </td>
                     <td className={o.side === "buy" ? "text-qe-green" : "text-qe-red"}>{o.side}</td>
                     <td>{o.quantity}</td>
                     <td>{o.status}</td>
