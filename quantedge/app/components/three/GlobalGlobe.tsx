@@ -7,18 +7,16 @@ import * as THREE from "three";
 import { CENTRES, ARCS, type FinancialCentre } from "../../data/markets";
 import { arcPoints, latLonToVec3 } from "../../lib/geo";
 import { useAppStore } from "../../store/useAppStore";
+import { buildCoastlineGeometry, buildLandPoints } from "../../lib/continents";
 
 const R = 1.6;
 
-/** Fibonacci sphere of dots forming the planet shell. */
+/** Thin dotted ocean shell behind the continents. */
 function PointSphere() {
   const geom = useMemo(() => {
-    const n = 2400;
+    const n = 1800;
     const positions = new Float32Array(n * 3);
-    const colors = new Float32Array(n * 3);
     const phi = Math.PI * (3 - Math.sqrt(5));
-    const c1 = new THREE.Color("#5a0a16");
-    const c2 = new THREE.Color("#ffb4a6");
     for (let i = 0; i < n; i++) {
       const y = 1 - (i / (n - 1)) * 2;
       const r = Math.sqrt(1 - y * y);
@@ -28,27 +26,57 @@ function PointSphere() {
       positions[i * 3] = x * R;
       positions[i * 3 + 1] = y * R;
       positions[i * 3 + 2] = z * R;
-      const t = (y + 1) / 2;
-      const c = c1.clone().lerp(c2, 0.1 + t * 0.3);
-      colors[i * 3] = c.r;
-      colors[i * 3 + 1] = c.g;
-      colors[i * 3 + 2] = c.b;
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    g.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     return g;
   }, []);
   return (
     <points geometry={geom}>
       <pointsMaterial
-        size={0.018}
-        vertexColors
+        size={0.012}
+        color="#4a0a14"
         transparent
-        opacity={0.85}
+        opacity={0.55}
         sizeAttenuation
       />
     </points>
+  );
+}
+
+/** Opaque filled sphere so coastlines on the far side are occluded. */
+function OceanSphere() {
+  return (
+    <mesh>
+      <sphereGeometry args={[R * 0.995, 48, 48]} />
+      <meshBasicMaterial color="#07070a" />
+    </mesh>
+  );
+}
+
+/** Dense dotted continents sampled from world-atlas land-110m. */
+function LandPoints() {
+  const geom = useMemo(() => buildLandPoints(R + 0.004, 1.8), []);
+  return (
+    <points geometry={geom}>
+      <pointsMaterial
+        size={0.018}
+        color="#ff8a7a"
+        transparent
+        opacity={0.9}
+        sizeAttenuation
+      />
+    </points>
+  );
+}
+
+/** Thin coastline outlines on top of the land points. */
+function Coastlines() {
+  const geom = useMemo(() => buildCoastlineGeometry(R + 0.006), []);
+  return (
+    <lineSegments geometry={geom}>
+      <lineBasicMaterial color="#ffb4a6" transparent opacity={0.85} />
+    </lineSegments>
   );
 }
 
@@ -225,7 +253,10 @@ function Scene({ onPick }: { onPick: (id: string) => void }) {
   return (
     <group ref={groupRef}>
       <ambientLight intensity={0.6} />
+      <OceanSphere />
       <PointSphere />
+      <LandPoints />
+      <Coastlines />
       <GraticuleLines />
       {ARCS.map((a, i) => {
         const f = CENTRES.find((c) => c.id === a.from)!;

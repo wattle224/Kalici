@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas, useFrame, useThree, ThreeEvent } from "@react-three/fiber";
-import { Html, OrbitControls } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useAppStore } from "../../store/useAppStore";
@@ -16,37 +16,22 @@ export type CubeFace = {
 const FACE_POS: {
   pos: [number, number, number];
   rot: [number, number, number];
+  normal: THREE.Vector3;
 }[] = [
-  { pos: [0, 0, 1], rot: [0, 0, 0] },
-  { pos: [0, 0, -1], rot: [0, Math.PI, 0] },
-  { pos: [1, 0, 0], rot: [0, Math.PI / 2, 0] },
-  { pos: [-1, 0, 0], rot: [0, -Math.PI / 2, 0] },
-  { pos: [0, 1, 0], rot: [-Math.PI / 2, 0, 0] },
-  { pos: [0, -1, 0], rot: [Math.PI / 2, 0, 0] },
+  { pos: [0, 0, 1], rot: [0, 0, 0], normal: new THREE.Vector3(0, 0, 1) },
+  { pos: [0, 0, -1], rot: [0, Math.PI, 0], normal: new THREE.Vector3(0, 0, -1) },
+  { pos: [1, 0, 0], rot: [0, Math.PI / 2, 0], normal: new THREE.Vector3(1, 0, 0) },
+  { pos: [-1, 0, 0], rot: [0, -Math.PI / 2, 0], normal: new THREE.Vector3(-1, 0, 0) },
+  { pos: [0, 1, 0], rot: [-Math.PI / 2, 0, 0], normal: new THREE.Vector3(0, 1, 0) },
+  { pos: [0, -1, 0], rot: [Math.PI / 2, 0, 0], normal: new THREE.Vector3(0, -1, 0) },
 ];
 
-function FaceGrid({ color = "#a01324" }: { color?: string }) {
-  const geom = useMemo(() => {
-    const positions: number[] = [];
-    const n = 8;
-    const s = 1;
-    for (let i = 0; i <= n; i++) {
-      const t = -s + (2 * s * i) / n;
-      positions.push(-s, t, 0.001, s, t, 0.001);
-      positions.push(t, -s, 0.001, t, s, 0.001);
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute(
-      "position",
-      new THREE.BufferAttribute(new Float32Array(positions), 3)
-    );
-    return g;
-  }, []);
-  return (
-    <lineSegments geometry={geom}>
-      <lineBasicMaterial color={color} transparent opacity={0.35} />
-    </lineSegments>
-  );
+const FORWARD = new THREE.Vector3(0, 0, 1);
+
+/** Quaternion that rotates the group so face `i`'s normal points at the camera. */
+function faceQuat(i: number): THREE.Quaternion {
+  const q = new THREE.Quaternion().setFromUnitVectors(FACE_POS[i].normal, FORWARD);
+  return q;
 }
 
 function FacePoints({ seed = 1, color = "#ffb4a6" }: { seed?: number; color?: string }) {
@@ -56,12 +41,12 @@ function FacePoints({ seed = 1, color = "#ffb4a6" }: { seed?: number; color?: st
       s = (s * 9301 + 49297) % 233280;
       return s / 233280;
     };
-    const n = 90;
+    const n = 60;
     const positions = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
-      positions[i * 3] = -0.95 + rnd() * 1.9;
-      positions[i * 3 + 1] = -0.95 + rnd() * 1.9;
-      positions[i * 3 + 2] = 0.002;
+      positions[i * 3] = -0.9 + rnd() * 1.8;
+      positions[i * 3 + 1] = -0.9 + rnd() * 1.8;
+      positions[i * 3 + 2] = 0.004;
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(positions, 3));
@@ -71,16 +56,127 @@ function FacePoints({ seed = 1, color = "#ffb4a6" }: { seed?: number; color?: st
   useFrame(({ clock }) => {
     if (!ref.current) return;
     (ref.current.material as THREE.PointsMaterial).opacity =
-      0.55 + Math.sin(clock.getElapsedTime() * 1.5 + seed) * 0.25;
+      0.4 + Math.sin(clock.getElapsedTime() * 1.5 + seed) * 0.25;
   });
   return (
     <points ref={ref} geometry={geom}>
-      <pointsMaterial size={0.03} color={color} transparent />
+      <pointsMaterial size={0.025} color={color} transparent />
     </points>
   );
 }
 
-function Face({
+/** Paints face content (header + metrics + footer) to a 512x512 canvas and
+ *  returns a THREE.CanvasTexture suitable for a plane's map. */
+function paintFace(face: CubeFace, active: boolean): THREE.CanvasTexture {
+  const size = 512;
+  const cvs = document.createElement("canvas");
+  cvs.width = size;
+  cvs.height = size;
+  const ctx = cvs.getContext("2d")!;
+  const font =
+    'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
+  // Background
+  ctx.fillStyle = active ? "#120308" : "#0a0a0d";
+  ctx.fillRect(0, 0, size, size);
+
+  // Subtle inner grid
+  ctx.strokeStyle = active ? "rgba(255,180,166,0.18)" : "rgba(122,11,22,0.35)";
+  ctx.lineWidth = 1;
+  const cells = 8;
+  for (let i = 1; i < cells; i++) {
+    const t = (i / cells) * size;
+    ctx.beginPath();
+    ctx.moveTo(0, t);
+    ctx.lineTo(size, t);
+    ctx.moveTo(t, 0);
+    ctx.lineTo(t, size);
+    ctx.stroke();
+  }
+
+  // Border + corner marks
+  ctx.strokeStyle = active ? "#ffb4a6" : "#a01324";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(10, 10, size - 20, size - 20);
+  ctx.strokeStyle = active ? "#ffb4a6" : "#a01324";
+  ctx.lineWidth = 4;
+  const cm = 26;
+  // top-left
+  ctx.beginPath();
+  ctx.moveTo(10, 10 + cm); ctx.lineTo(10, 10); ctx.lineTo(10 + cm, 10);
+  // top-right
+  ctx.moveTo(size - 10 - cm, 10); ctx.lineTo(size - 10, 10); ctx.lineTo(size - 10, 10 + cm);
+  // bottom-left
+  ctx.moveTo(10, size - 10 - cm); ctx.lineTo(10, size - 10); ctx.lineTo(10 + cm, size - 10);
+  // bottom-right
+  ctx.moveTo(size - 10 - cm, size - 10); ctx.lineTo(size - 10, size - 10); ctx.lineTo(size - 10, size - 10 - cm);
+  ctx.stroke();
+
+  // Header
+  ctx.fillStyle = active ? "#ffb4a6" : "#a01324";
+  ctx.font = `bold 20px ${font}`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText(face.code, 36, 56);
+  ctx.fillStyle = "#ffb4a6";
+  ctx.font = `bold 22px ${font}`;
+  ctx.textAlign = "right";
+  ctx.fillText(face.title.toUpperCase(), size - 36, 56);
+  ctx.strokeStyle = "rgba(160,19,36,0.75)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(36, 76);
+  ctx.lineTo(size - 36, 76);
+  ctx.stroke();
+
+  // Metrics
+  const topMetrics = 110;
+  const rowH = Math.min(60, (size - topMetrics - 90) / Math.max(1, face.metrics.length));
+  face.metrics.forEach((m, i) => {
+    const y = topMetrics + i * rowH;
+    // row divider
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = "rgba(160,19,36,0.35)";
+    ctx.beginPath();
+    ctx.moveTo(36, y + rowH - 8);
+    ctx.lineTo(size - 36, y + rowH - 8);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // label
+    ctx.fillStyle = "#9a9aa6";
+    ctx.font = `16px ${font}`;
+    ctx.textAlign = "left";
+    ctx.fillText(m.label.toUpperCase(), 36, y + 24);
+    // value
+    const tone =
+      m.tone === "good"
+        ? "#2fe08a"
+        : m.tone === "warn"
+        ? "#ffb020"
+        : m.tone === "bad"
+        ? "#ff8a7a"
+        : "#ffb4a6";
+    ctx.fillStyle = tone;
+    ctx.font = `bold 26px ${font}`;
+    ctx.textAlign = "right";
+    ctx.fillText(m.value, size - 36, y + 28);
+  });
+
+  // Footer
+  ctx.fillStyle = active ? "#ffb4a6" : "#6b6b76";
+  ctx.font = `14px ${font}`;
+  ctx.textAlign = "left";
+  ctx.fillText("QUANTEDGE // QIC", 36, size - 28);
+  ctx.textAlign = "right";
+  ctx.fillText(active ? "● SELECTED" : "idle", size - 36, size - 28);
+
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function FaceContent({
   index,
   face,
   active,
@@ -92,8 +188,20 @@ function Face({
   onPick: (i: number) => void;
 }) {
   const { pos, rot } = FACE_POS[index];
+
+  // Repaint texture whenever face data or active state changes
+  const texture = useMemo(() => paintFace(face, active), [face, active]);
+  useEffect(() => {
+    return () => {
+      texture.dispose();
+    };
+  }, [texture]);
+
   return (
-    <group position={pos as [number, number, number]} rotation={rot as [number, number, number]}>
+    <group
+      position={pos as [number, number, number]}
+      rotation={rot as [number, number, number]}
+    >
       <mesh
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
           e.stopPropagation();
@@ -102,64 +210,13 @@ function Face({
       >
         <planeGeometry args={[2, 2]} />
         <meshBasicMaterial
-          color={active ? "#2a0810" : "#0a0a0d"}
-          transparent
-          opacity={0.9}
+          map={texture}
+          transparent={false}
+          side={THREE.DoubleSide}
+          toneMapped={false}
         />
       </mesh>
-      <FaceGrid color={active ? "#ffb4a6" : "#7a0b16"} />
       <FacePoints seed={(index + 1) * 7} color={face.accent} />
-      <Html
-        center
-        distanceFactor={6}
-        position={[0, 0, 0.005]}
-        style={{ pointerEvents: "none" }}
-      >
-        <div
-          style={{
-            width: 220,
-            textAlign: "left",
-            padding: "6px 8px",
-            background: "rgba(10,10,13,0.65)",
-            border: `1px solid ${active ? "#ffb4a6" : "#a01324"}`,
-            color: "#e6e6ea",
-            fontFamily: "JetBrains Mono, monospace",
-            fontSize: 10,
-            lineHeight: 1.4,
-          }}
-        >
-          <div
-            style={{
-              color: active ? "#ffb4a6" : "#e6e6ea",
-              fontSize: 9,
-              letterSpacing: 2,
-            }}
-          >
-            {face.code} · {face.title.toUpperCase()}
-          </div>
-          <div style={{ marginTop: 4, borderTop: "1px dashed rgba(160,19,36,0.4)", paddingTop: 4 }}>
-            {face.metrics.slice(0, 4).map((m) => (
-              <div key={m.label} style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#9a9aa6" }}>{m.label}</span>
-                <span
-                  style={{
-                    color:
-                      m.tone === "good"
-                        ? "#2fe08a"
-                        : m.tone === "warn"
-                        ? "#ffb020"
-                        : m.tone === "bad"
-                        ? "#ff8a7a"
-                        : "#ffb4a6",
-                  }}
-                >
-                  {m.value}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Html>
     </group>
   );
 }
@@ -167,17 +224,15 @@ function Face({
 function Wireframe() {
   return (
     <lineSegments>
-      <edgesGeometry
-        args={[new THREE.BoxGeometry(2.002, 2.002, 2.002)]}
-      />
-      <lineBasicMaterial color="#ffb4a6" transparent opacity={0.75} />
+      <edgesGeometry args={[new THREE.BoxGeometry(2.002, 2.002, 2.002)]} />
+      <lineBasicMaterial color="#ffb4a6" transparent opacity={0.85} />
     </lineSegments>
   );
 }
 
 function FloatingParticles() {
   const geom = useMemo(() => {
-    const n = 220;
+    const n = 180;
     const positions = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       positions[i * 3] = (Math.random() - 0.5) * 3.6;
@@ -190,22 +245,43 @@ function FloatingParticles() {
   }, []);
   const ref = useRef<THREE.Points>(null!);
   useFrame((_, dt) => {
-    if (ref.current) ref.current.rotation.y += dt * 0.05;
+    if (ref.current) ref.current.rotation.y += dt * 0.04;
   });
   return (
     <points ref={ref} geometry={geom}>
-      <pointsMaterial size={0.015} color="#a01324" transparent opacity={0.6} />
+      <pointsMaterial size={0.015} color="#a01324" transparent opacity={0.55} />
     </points>
   );
 }
 
-function CubeScene({ faces, onPick }: { faces: CubeFace[]; onPick: (i: number) => void }) {
+function CubeScene({
+  faces,
+  onPick,
+  currentFront,
+  setCurrentFront,
+  autoCycle,
+  pinFace,
+}: {
+  faces: CubeFace[];
+  onPick: (i: number) => void;
+  currentFront: number;
+  setCurrentFront: (i: number) => void;
+  autoCycle: boolean;
+  pinFace: (i: number) => void;
+}) {
   const group = useRef<THREE.Group>(null!);
-  const active = useAppStore((s) => s.selectedCubeFace);
+  const selected = useAppStore((s) => s.selectedCubeFace);
   const { gl } = useThree();
+
+  const targetQuat = useRef<THREE.Quaternion>(faceQuat(0));
   const dragging = useRef(false);
   const last = useRef({ x: 0, y: 0 });
-  const vel = useRef({ x: 0.003, y: 0.004 });
+  const lastCycle = useRef<number>(performance.now());
+
+  useEffect(() => {
+    targetQuat.current = faceQuat(currentFront);
+    lastCycle.current = performance.now();
+  }, [currentFront]);
 
   useEffect(() => {
     const el = gl.domElement;
@@ -215,11 +291,18 @@ function CubeScene({ faces, onPick }: { faces: CubeFace[]; onPick: (i: number) =
     };
     const onMove = (e: PointerEvent) => {
       if (!dragging.current || !group.current) return;
-      const dx = (e.clientX - last.current.x) * 0.005;
-      const dy = (e.clientY - last.current.y) * 0.005;
-      group.current.rotation.y += dx;
-      group.current.rotation.x += dy;
-      vel.current = { x: dy * 0.1, y: dx * 0.1 };
+      const dx = (e.clientX - last.current.x) * 0.006;
+      const dy = (e.clientY - last.current.y) * 0.006;
+      const qy = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(0, 1, 0),
+        dx
+      );
+      const qx = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(1, 0, 0),
+        dy
+      );
+      group.current.quaternion.premultiply(qy).premultiply(qx);
+      targetQuat.current.copy(group.current.quaternion);
       last.current = { x: e.clientX, y: e.clientY };
     };
     const onUp = () => (dragging.current = false);
@@ -233,13 +316,18 @@ function CubeScene({ faces, onPick }: { faces: CubeFace[]; onPick: (i: number) =
     };
   }, [gl]);
 
-  useFrame(() => {
+  useFrame((_, dt) => {
     if (!group.current) return;
+    const now = performance.now();
+
+    if (autoCycle && !dragging.current && now - lastCycle.current > 5000) {
+      lastCycle.current = now;
+      setCurrentFront((currentFront + 1) % 6);
+    }
+
     if (!dragging.current) {
-      group.current.rotation.y += vel.current.y + 0.003;
-      group.current.rotation.x += vel.current.x;
-      vel.current.x *= 0.96;
-      vel.current.y *= 0.96;
+      const q = group.current.quaternion;
+      q.slerp(targetQuat.current, Math.min(1, dt * 2.2));
     }
   });
 
@@ -247,15 +335,18 @@ function CubeScene({ faces, onPick }: { faces: CubeFace[]; onPick: (i: number) =
     <>
       <ambientLight intensity={0.7} />
       <FloatingParticles />
-      <group ref={group} scale={0.95}>
+      <group ref={group} scale={1.05}>
         <Wireframe />
         {faces.map((f, i) => (
-          <Face
+          <FaceContent
             key={i}
             index={i}
             face={f}
-            active={active === i}
-            onPick={onPick}
+            active={selected === i || currentFront === i}
+            onPick={(idx) => {
+              pinFace(idx);
+              onPick(idx);
+            }}
           />
         ))}
       </group>
@@ -275,6 +366,12 @@ export function IntelligenceCube({
   const cubeMode = useAppStore((s) => s.cubeMode);
   const setCubeMode = useAppStore((s) => s.setCubeMode);
   const active = useAppStore((s) => s.selectedCubeFace);
+  const [currentFront, setCurrentFront] = useState(0);
+  const [autoCycle, setAutoCycle] = useState(true);
+  const pinFace = (i: number) => {
+    setCurrentFront(i);
+    setAutoCycle(false);
+  };
 
   useEffect(() => setReady(true), []);
   if (!ready) return <div className="h-full w-full bg-bg-1" />;
@@ -307,16 +404,11 @@ export function IntelligenceCube({
             >
               <div className="flex justify-between items-baseline">
                 <div className="text-edge-crimson text-xxs">{f.code}</div>
-                <div className="text-edge-pale text-xxs uppercase">
-                  {f.title}
-                </div>
+                <div className="text-edge-pale text-xxs uppercase">{f.title}</div>
               </div>
               <div className="mt-2 space-y-1">
                 {f.metrics.map((m) => (
-                  <div
-                    key={m.label}
-                    className="flex justify-between text-xxs tabular"
-                  >
+                  <div key={m.label} className="flex justify-between text-xxs tabular">
                     <span className="text-edge-dim">{m.label}</span>
                     <span
                       className={
@@ -346,10 +438,17 @@ export function IntelligenceCube({
       <Canvas
         dpr={[1, 1.75]}
         gl={{ antialias: true, alpha: true }}
-        camera={{ fov: 42, position: [3.6, 2.4, 3.6] }}
+        camera={{ fov: 38, position: [0, 0, 4.6] }}
       >
         <color attach="background" args={["#060608"]} />
-        <CubeScene faces={faces} onPick={(i) => selectFace(i)} />
+        <CubeScene
+          faces={faces}
+          onPick={(i) => selectFace(i)}
+          currentFront={currentFront}
+          setCurrentFront={setCurrentFront}
+          autoCycle={autoCycle}
+          pinFace={pinFace}
+        />
         <OrbitControls
           enablePan={false}
           enableRotate={false}
@@ -361,14 +460,52 @@ export function IntelligenceCube({
       <div className="absolute top-2 left-2 text-xxs text-edge-dim uppercase tracking-widest">
         {title}
       </div>
-      <button
-        className="absolute top-2 right-2 text-xxs text-edge-dim hover:text-edge-pale border border-edge-crimson/40 px-2 py-[2px]"
-        onClick={() => setCubeMode("faces")}
-      >
-        ▦ 6-FACE
-      </button>
-      <div className="absolute bottom-2 left-2 text-xxs text-edge-dim">
-        drag · click face · wheel to zoom
+      <div className="absolute top-2 right-2 flex items-center gap-2">
+        <span className="text-xxs text-edge-dim">
+          FACE {currentFront + 1}/6 · {faces[currentFront]?.title}
+        </span>
+        <button
+          className="text-xxs text-edge-dim hover:text-edge-pale border border-edge-crimson/40 px-2 py-[2px]"
+          onClick={() => setCubeMode("faces")}
+        >
+          ▦ 6-FACE
+        </button>
+      </div>
+      <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-xxs text-edge-dim">
+        <span>
+          {autoCycle ? "auto-cycling" : "pinned"} · click a face to pin · drag to free-rotate
+        </span>
+        <div className="flex gap-1 items-center">
+          <button
+            onClick={() => setAutoCycle((v) => !v)}
+            className={
+              "text-xxs px-2 border " +
+              (autoCycle
+                ? "border-edge-green text-edge-green"
+                : "border-edge-amber text-edge-amber")
+            }
+            title={autoCycle ? "Pause auto-cycle" : "Resume auto-cycle"}
+          >
+            {autoCycle ? "■ PAUSE" : "▶ AUTO"}
+          </button>
+          {faces.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => {
+                pinFace(i);
+                selectFace(i);
+              }}
+              className={
+                "w-6 text-xxs tabular border " +
+                (i === currentFront
+                  ? "border-edge-pale text-edge-pale bg-edge-crimson/15"
+                  : "border-edge-crimson/40 text-edge-dim hover:text-edge-text")
+              }
+            >
+              F{i + 1}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
