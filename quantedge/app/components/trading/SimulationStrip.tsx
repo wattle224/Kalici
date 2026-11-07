@@ -77,16 +77,25 @@ export function SimulationStrip() {
           <div className="flex gap-2">
             <button
               onClick={async () => {
-                setFundHint("Starting ledger…");
-                const ok = await startLedger();
-                setFundHint(
-                  ok
-                    ? null
-                    : "Could not auto-start — run Start-Ledger.bat"
-                );
-                await refresh();
+                setFundHint("Starting ledger window… (watch for a new black console)");
+                const result = await startLedger();
+                if (result.ok) {
+                  setFundHint(
+                    result.already
+                      ? "Ledger already running on :8000"
+                      : "Ledger started — refreshing…"
+                  );
+                  await refresh();
+                  setFundHint(null);
+                } else {
+                  setFundHint(
+                    result.error ??
+                      "Auto-start failed. In the Kalici repo, double-click Start-Ledger.bat and keep that window open, then click REFRESH."
+                  );
+                }
               }}
-              className="border border-edge-crimson text-edge-pale text-xxs px-3 py-[3px] hover:bg-edge-crimson/15 whitespace-nowrap"
+              disabled={loading}
+              className="border border-edge-crimson text-edge-pale text-xxs px-3 py-[3px] hover:bg-edge-crimson/15 whitespace-nowrap disabled:opacity-50"
             >
               START LEDGER
             </button>
@@ -97,6 +106,9 @@ export function SimulationStrip() {
               {loading ? "…" : "REFRESH"}
             </button>
           </div>
+          {fundHint && (
+            <span className="text-edge-salmon w-full text-xxs">{fundHint}</span>
+          )}
         </div>
       </div>
     );

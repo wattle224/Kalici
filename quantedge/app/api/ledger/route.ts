@@ -6,7 +6,7 @@ import {
   existsSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { spawn } from "node:child_process";
+import { ensureLedgerRunning } from "../../../lib/ensureLedger";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -25,84 +25,6 @@ function ledgerPaths(): string[] {
     join(process.cwd(), "..", "backend", "data", "ledger.json"),
     join(process.cwd(), "backend", "data", "ledger.json"),
   ];
-}
-
-function repoRoot(): string {
-  // Next cwd is quantedge/ when launched via Launch-QuantEdge.bat
-  const cwd = process.cwd();
-  if (existsSync(join(cwd, "backend", "server.mjs"))) return cwd;
-  if (existsSync(join(cwd, "..", "backend", "server.mjs"))) {
-    return join(cwd, "..");
-  }
-  if (existsSync(join(cwd, "backend", "server.ts"))) return cwd;
-  return join(cwd, "..");
-}
-
-async function ledgerHealthy(): Promise<boolean> {
-  try {
-    const res = await fetch("http://127.0.0.1:8000/health", {
-      cache: "no-store",
-      signal: AbortSignal.timeout(1500),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-let startingLedger: Promise<boolean> | null = null;
-
-/** Spawn backend/server.mjs (or tsx server.ts) if :8000 is down. */
-async function ensureLedgerRunning(): Promise<boolean> {
-  if (await ledgerHealthy()) return true;
-  if (startingLedger) return startingLedger;
-
-  startingLedger = (async () => {
-    const root = repoRoot();
-    const mjs = join(root, "backend", "server.mjs");
-    const ts = join(root, "backend", "server.ts");
-
-    try {
-      if (existsSync(mjs)) {
-        const child = spawn(process.execPath, [mjs], {
-          cwd: root,
-          detached: true,
-          stdio: "ignore",
-          windowsHide: true,
-          env: { ...process.env, LEDGER_PORT: "8000" },
-        });
-        child.unref();
-      } else if (existsSync(ts)) {
-        const child = spawn(
-          process.platform === "win32" ? "npx.cmd" : "npx",
-          ["tsx", "backend/server.ts"],
-          {
-            cwd: root,
-            detached: true,
-            stdio: "ignore",
-            windowsHide: true,
-            shell: process.platform === "win32",
-            env: { ...process.env, LEDGER_PORT: "8000" },
-          }
-        );
-        child.unref();
-      } else {
-        return false;
-      }
-    } catch {
-      return false;
-    }
-
-    for (let i = 0; i < 40; i++) {
-      await new Promise((r) => setTimeout(r, 250));
-      if (await ledgerHealthy()) return true;
-    }
-    return false;
-  })().finally(() => {
-    startingLedger = null;
-  });
-
-  return startingLedger;
 }
 
 async function fetchUpstream(
@@ -369,16 +291,25 @@ export async function POST(request: Request) {
     const amount = Number(parsed.amount ?? parsed.deposit);
 
     if (parsed.action === "start-ledger") {
-      const ok = await ensureLedgerRunning();
+      const result = await ensureLedgerRunning();
       return NextResponse.json(
-        ok
-          ? { ok: true, started: true, source: "api:8000" }
+        result.ok
+          ? {
+              ok: true,
+              started: true,
+              source: "api:8000",
+              method: result.method,
+              already: result.already ?? false,
+            }
           : {
               ok: false,
               error:
-                "Could not start ledger on :8000. Double-click Start-Ledger.bat in the repo root.",
+                result.error ??
+                "Could not start ledger on :8000. Double-click Start-Ledger.bat in the Kalici repo root and keep the window open.",
+              logPath: result.logPath,
+              root: result.root,
             },
-        { status: ok ? 200 : 503 }
+        { status: result.ok ? 200 : 503 }
       );
     }
 
@@ -402,7 +333,7 @@ export async function POST(request: Request) {
       body: raw,
     });
 
-    if (!upstream && (isFund || parsed.action === "start-ledger")) {
+    if (!upstream && isFund) {
       await ensureLedgerRunning();
       upstream = await fetchUpstream({
         method: "POST",

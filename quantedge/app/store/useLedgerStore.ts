@@ -25,14 +25,19 @@ export const useLedgerStore = create<LedgerState>((set) => ({
       const payload = await fetchLedger();
       set({ summary: summariseLedger(payload), loading: false });
     } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : "Ledger unreachable";
+      // Strip noisy browser "Failed to fetch" / localhost URLs — tell the user what to do.
+      const clean = /Failed to fetch|localhost:8000|127\.0\.0\.1:8000/i.test(
+        msg
+      )
+        ? "Ledger on :8000 is not running. Click START LEDGER (or double-click Start-Ledger.bat) and keep the window open."
+        : msg;
       set({
         loading: false,
         summary: {
           ...EMPTY_SUMMARY,
-          error:
-            e instanceof Error
-              ? e.message
-              : "Ledger API unreachable on :8000",
+          error: clean,
           fetchedAt: Date.now(),
         },
       });

@@ -120,13 +120,8 @@ export type SimulationSummary = {
   fetchedAt: number | null;
 };
 
-const LEDGER_URLS = [
-  "/api/ledger",
-  "http://127.0.0.1:8000/api/ledger",
-  "http://127.0.0.1:8000/ledger",
-  "http://127.0.0.1:8000/api/trading",
-  "http://localhost:8000/api/ledger",
-];
+/** Same-origin only — never hit :8000 from the browser (Chrome PNA / Failed to fetch). */
+const LEDGER_URLS = ["/api/ledger"];
 
 async function tryFetch(
   url: string,
@@ -199,35 +194,57 @@ export async function fetchLedger(): Promise<LedgerPayload> {
   throw (
     last ??
     new Error(
-      "Ledger unreachable. Start it with Launch-QuantEdge.bat (starts :8000)."
+      "Ledger unreachable. Click START LEDGER, or double-click Start-Ledger.bat and keep that window open."
     )
   );
 }
 
-/**
- * Same-origin proxy first (avoids Chrome Private Network Access / CORS issues
- * talking to :8000 from the browser). Direct :8000 is the fallback.
- */
-const FUND_URLS = [
-  "/api/ledger",
-  "http://127.0.0.1:8000/api/ledger",
-  "http://127.0.0.1:8000/api/trading",
-  "http://localhost:8000/api/ledger",
-];
+/** Same-origin only — the Next proxy starts :8000 if needed. */
+const FUND_URLS = ["/api/ledger"];
 
-export async function startLedger(): Promise<boolean> {
+export type StartLedgerResult = {
+  ok: boolean;
+  error?: string;
+  method?: string;
+  already?: boolean;
+};
+
+export async function startLedger(): Promise<StartLedgerResult> {
   try {
     const res = await fetch("/api/ledger", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "start-ledger" }),
       cache: "no-store",
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(25000),
     });
-    const data = (await res.json()) as { ok?: boolean };
-    return res.ok && data.ok === true;
-  } catch {
-    return false;
+    const data = (await res.json()) as {
+      ok?: boolean;
+      error?: string;
+      method?: string;
+      already?: boolean;
+    };
+    if (res.ok && data.ok === true) {
+      return {
+        ok: true,
+        method: data.method,
+        already: data.already,
+      };
+    }
+    return {
+      ok: false,
+      error:
+        data.error ??
+        "Could not start ledger. Double-click Start-Ledger.bat and keep it open.",
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error:
+        e instanceof Error
+          ? e.message
+          : "Start Ledger request failed — is QUANTEDGE :3100 still running?",
+    };
   }
 }
 
@@ -264,9 +281,9 @@ export async function setDeposit(amount: number): Promise<LedgerPayload> {
   let payload = await attempt();
   if (payload) return payload;
 
-  // Self-heal: ask the Next proxy to spawn backend/server.mjs, then retry once.
+  // Self-heal: ask the Next proxy to spawn the ledger window, then retry once.
   const started = await startLedger();
-  if (started) {
+  if (started.ok) {
     payload = await attempt();
     if (payload) return payload;
   }
@@ -274,7 +291,8 @@ export async function setDeposit(amount: number): Promise<LedgerPayload> {
   throw (
     last ??
     new Error(
-      "Could not set deposit — double-click Start-Ledger.bat and keep that window open, then try again."
+      started.error ??
+        "Could not set deposit — double-click Start-Ledger.bat and keep that window open, then try again."
     )
   );
 }
