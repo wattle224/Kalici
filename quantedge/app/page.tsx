@@ -48,20 +48,29 @@ export default function GlobalWorkspace() {
         accent: "#ff8a7a",
         metrics: sim.connected
           ? [
-              { label: "Orders submitted", value: `${sim.ordersSubmitted}`, tone: "good" },
-              { label: "Trades completed", value: `${sim.tradesCompleted}`, tone: "good" },
+              { label: "Orders / fills", value: `${sim.ordersSubmitted}`, tone: "good" },
               { label: "Buy / Sell", value: `${sim.buys} / ${sim.sells}` },
               {
-                label: "Queued",
-                value: `${sim.ordersPending}`,
-                tone: sim.ordersPending ? "warn" : "good",
+                label: "Last decision",
+                value: sim.lastDecision?.action ?? "—",
+                tone:
+                  sim.lastDecision?.action === "BUY"
+                    ? "good"
+                    : sim.lastDecision?.action === "SELL"
+                    ? "bad"
+                    : "warn",
+              },
+              {
+                label: "Model",
+                value: sim.executionLabel,
+                tone: sim.executionLabel === "ONLINE" ? "good" : "warn",
               },
             ]
           : [
-              { label: "Orders in", value: "—", tone: "warn" },
-              { label: "Trades completed", value: "—", tone: "warn" },
+              { label: "Orders / fills", value: "—", tone: "warn" },
               { label: "Buy / Sell", value: "ledger offline" },
-              { label: "Queued", value: "—", tone: "warn" },
+              { label: "Last decision", value: "—", tone: "warn" },
+              { label: "Model", value: "OFFLINE", tone: "warn" },
             ],
       },
       {
@@ -70,28 +79,24 @@ export default function GlobalWorkspace() {
         accent: "#ffb4a6",
         metrics: sim.connected
           ? [
+              { label: "Deposit", value: `£${sim.deposit.toFixed(0)}` },
+              { label: "Cash", value: `£${sim.cash.toFixed(2)}` },
               {
-                label: "Realised PnL",
-                value: fmtPnL(sim.realizedPnL),
-                tone: sim.realizedPnL >= 0 ? "good" : "bad",
+                label: "Equity",
+                value: `£${sim.equity.toFixed(2)}`,
+                tone: sim.returnPct >= 0 ? "good" : "bad",
               },
               {
-                label: "Unrealised PnL",
-                value: fmtPnL(sim.unrealizedPnL),
-                tone: sim.unrealizedPnL >= 0 ? "good" : "bad",
-              },
-              { label: "Open positions", value: `${sim.positions.length}` },
-              {
-                label: "Execution",
-                value: sim.executionLabel,
-                tone: sim.executionLabel === "ONLINE" ? "good" : "warn",
+                label: "Return",
+                value: `${sim.returnPct >= 0 ? "+" : ""}${sim.returnPct.toFixed(2)}%`,
+                tone: sim.returnPct >= 0 ? "good" : "bad",
               },
             ]
           : [
-              { label: "Realised PnL", value: "—", tone: "warn" },
-              { label: "Unrealised PnL", value: "—", tone: "warn" },
-              { label: "Open positions", value: "ledger offline" },
-              { label: "Execution", value: "OFFLINE", tone: "warn" },
+              { label: "Deposit", value: "—", tone: "warn" },
+              { label: "Cash", value: "—", tone: "warn" },
+              { label: "Equity", value: "ledger offline" },
+              { label: "Return", value: "—", tone: "warn" },
             ],
       },
       {

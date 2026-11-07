@@ -40,15 +40,23 @@ for /f "delims=" %%v in ('node -v') do echo [OK] Node.js %%v
 
 set "SERVER_SCRIPT="
 set "SERVER_DIR="
+set "SERVER_CMD="
 if exist "%ROOT%\iam-standalone\server.js" (
   set "SERVER_SCRIPT=server.js"
   set "SERVER_DIR=%ROOT%\iam-standalone"
+  set "SERVER_CMD=node server.js"
+) else if exist "%ROOT%\backend\server.ts" (
+  set "SERVER_SCRIPT=server.ts"
+  set "SERVER_DIR=%ROOT%"
+  set "SERVER_CMD=npx tsx backend/server.ts"
 ) else if exist "%ROOT%\backend\server.mjs" (
   set "SERVER_SCRIPT=server.mjs"
   set "SERVER_DIR=%ROOT%\backend"
+  set "SERVER_CMD=node server.mjs"
 ) else if exist "%ROOT%\server.js" (
   set "SERVER_SCRIPT=server.js"
   set "SERVER_DIR=%ROOT%"
+  set "SERVER_CMD=node server.js"
 )
 
 if not defined SERVER_SCRIPT (
@@ -68,7 +76,7 @@ REM Kill stale attempt if port in use but not responding
 powershell -NoProfile -Command "try { (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 2).StatusCode } catch { exit 1 }" >nul 2>&1
 if errorlevel 1 (
   echo Starting ledger API on port 8000...
-  start "Kalici Ledger API - KEEP OPEN" /D "%SERVER_DIR%" cmd /k node "%SERVER_SCRIPT%"
+  start "Kalici Ledger API - KEEP OPEN" /D "%SERVER_DIR%" cmd /k %SERVER_CMD%
 ) else (
   echo [OK] Ledger API already running on port 8000
 )

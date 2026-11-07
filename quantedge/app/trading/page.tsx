@@ -30,8 +30,8 @@ export default function TradingWorkspace() {
           </span>
           <span className="text-edge-dim text-xxs">
             {sim.connected
-              ? `LIVE LEDGER · :8000 · ${sim.executionLabel} · ${sim.tradesCompleted} fills · RPNL ${fmtPnL(sim.realizedPnL)}`
-              : "LEDGER OFFLINE · start :8000 to see your simulation orders / fills / PnL"}
+              ? `DEPOSIT MODEL · £${sim.deposit.toFixed(0)} funded · equity £${sim.equity.toFixed(2)} · ${sim.returnPct >= 0 ? "+" : ""}${sim.returnPct.toFixed(2)}% · ${sim.tradesCompleted} fills · last ${sim.lastDecision?.action ?? "—"}`
+              : "LEDGER OFFLINE · start :8000 — deposit-based model buys/sells from your funded cash"}
           </span>
         </div>
         <div className="text-xxs text-edge-dim">

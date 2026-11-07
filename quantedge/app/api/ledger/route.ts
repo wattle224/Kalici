@@ -11,14 +11,15 @@ const UPSTREAMS = [
   "http://127.0.0.1:8000/api/trading",
 ];
 
-/** Same-origin proxy so the browser never has to call :8000 directly
- *  (avoids CORS / Private Network Access "Failed to fetch" errors). */
-async function fetchUpstream(): Promise<Response | null> {
+async function fetchUpstream(
+  init?: RequestInit
+): Promise<Response | null> {
   for (const url of UPSTREAMS) {
     try {
       const res = await fetch(url, {
         cache: "no-store",
-        signal: AbortSignal.timeout(2500),
+        signal: AbortSignal.timeout(4000),
+        ...init,
       });
       if (res.ok) return res;
     } catch {
@@ -29,7 +30,15 @@ async function fetchUpstream(): Promise<Response | null> {
 }
 
 function settledFills(trades: unknown[]) {
-  return (trades as { status?: string; executionPrice?: number; quantity?: number; executedAt?: string }[])
+  return (
+    trades as {
+      status?: string;
+      executionPrice?: number;
+      quantity?: number;
+      executedAt?: string;
+      realizedPnL?: number | null;
+    }[]
+  )
     .filter(
       (t) =>
         t.status === "filled" &&
@@ -43,14 +52,6 @@ function settledFills(trades: unknown[]) {
     );
 }
 
-function totalRealizedPnL(trades: unknown[]) {
-  return (trades as { realizedPnL?: number | null }[]).reduce(
-    (s, t) => s + (t.realizedPnL ?? 0),
-    0
-  );
-}
-
-/** Fallback: read backend/data/ledger.json directly if the :8000 process is down. */
 function readLedgerFile() {
   const candidates = [
     join(process.cwd(), "..", "backend", "data", "ledger.json"),
@@ -61,12 +62,38 @@ function readLedgerFile() {
     try {
       const snapshot = JSON.parse(readFileSync(path, "utf8")) as {
         trades?: unknown[];
-        openPositions?: unknown[];
+        openPositions?: { unrealizedPnL?: number; quantity: number; averageEntryPrice: number; symbol: string }[];
         pendingAutomations?: unknown[];
         executionState?: string;
+        capital?: {
+          deposit: number;
+          cash: number;
+          markPrice: number;
+          decisions?: unknown[];
+        };
       };
       const history = settledFills(snapshot.trades ?? []);
-      const realized = totalRealizedPnL(snapshot.trades ?? []);
+      const realized = (
+        snapshot.trades as { realizedPnL?: number | null }[] | undefined
+      )?.reduce((s, t) => s + (t.realizedPnL ?? 0), 0) ?? 0;
+      const capital = snapshot.capital;
+      const mark = capital?.markPrice ?? 1.1611;
+      const cash = capital?.cash ?? 0;
+      const deposit = capital?.deposit ?? 0;
+      const positions = snapshot.openPositions ?? [];
+      const equity =
+        cash +
+        positions.reduce(
+          (s, p) =>
+            s +
+            p.quantity *
+              (p.symbol?.startsWith("XRP") ? mark : p.averageEntryPrice),
+          0
+        );
+      const unrealized = positions.reduce(
+        (s, p) => s + (p.unrealizedPnL ?? 0),
+        0
+      );
       return {
         ok: true,
         source: "file",
@@ -78,16 +105,27 @@ function readLedgerFile() {
           isOnline: snapshot.executionState === "running",
         },
         executionState: snapshot.executionState,
-        openPositions: snapshot.openPositions ?? [],
+        openPositions: positions,
         tradeHistory: history,
         orders: history,
         pendingAutomations: snapshot.pendingAutomations ?? [],
         totalRealizedPnL: realized,
         realisedPnL: realized,
-        note: "Served from backend/data/ledger.json — start the ledger API on :8000 for live updates.",
+        unrealizedPnL: unrealized,
+        capital,
+        deposit,
+        cash,
+        equity,
+        returnPct: deposit
+          ? Math.round(((equity - deposit) / deposit) * 10000) / 100
+          : 0,
+        markPrice: mark,
+        lastDecision: capital?.decisions?.[0] ?? null,
+        decisions: capital?.decisions ?? [],
+        note: "Served from backend/data/ledger.json — start the ledger API on :8000 for live model ticks.",
       };
     } catch {
-      /* try next path */
+      /* try next */
     }
   }
   return null;
@@ -109,7 +147,28 @@ export async function GET() {
     {
       ok: false,
       error:
-        "Ledger unreachable on :8000 and no backend/data/ledger.json found. Start it with Launch-Investment-Management.bat or npm run ledger.",
+        "Ledger unreachable on :8000 and no backend/data/ledger.json found. Start Launch-QuantEdge.bat.",
+    },
+    { status: 503 }
+  );
+}
+
+export async function POST(request: Request) {
+  const body = await request.text();
+  const upstream = await fetchUpstream({
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+  });
+  if (upstream) {
+    const data = await upstream.json();
+    return NextResponse.json({ ...data, source: "api:8000" });
+  }
+  return NextResponse.json(
+    {
+      ok: false,
+      error:
+        "Cannot set deposit — ledger API on :8000 is not running. Start Launch-QuantEdge.bat.",
     },
     { status: 503 }
   );

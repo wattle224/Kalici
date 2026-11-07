@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useLedgerStore } from "../../store/useLedgerStore";
-import { fmtPnL } from "../../lib/ledgerApi";
+import { fmtGBP, fmtPnL } from "../../lib/ledgerApi";
 
 function Cell({
   label,
@@ -25,7 +26,7 @@ function Cell({
       ? "text-edge-dim"
       : "text-edge-pale";
   return (
-    <div className="flex-1 min-w-[140px] px-3 py-2 border-r border-edge-crimson/25 last:border-r-0">
+    <div className="flex-1 min-w-[120px] px-3 py-2 border-r border-edge-crimson/25 last:border-r-0">
       <div className="text-edge-dim text-xxs uppercase tracking-widest">
         {label}
       </div>
@@ -39,6 +40,8 @@ export function SimulationStrip() {
   const summary = useLedgerStore((s) => s.summary);
   const loading = useLedgerStore((s) => s.loading);
   const refresh = useLedgerStore((s) => s.refresh);
+  const fundDeposit = useLedgerStore((s) => s.fundDeposit);
+  const [amount, setAmount] = useState("1000");
 
   if (!summary.connected) {
     return (
@@ -51,11 +54,10 @@ export function SimulationStrip() {
         <div className="flex-1 px-3 py-2 text-xs text-edge-dim flex items-center justify-between gap-3">
           <span>
             Simulation ledger not reachable. Close QUANTEDGE and re-run{" "}
-            <span className="text-edge-pale">Launch-QuantEdge.bat</span> (or the
-            Desktop shortcut) — it now starts the ledger on{" "}
-            <span className="text-edge-pale">:8000</span> automatically. Keep
-            the &quot;Kalici Ledger API :8000 - KEEP OPEN&quot; window open, then
-            click Refresh.
+            <span className="text-edge-pale">Launch-QuantEdge.bat</span> — it
+            starts the deposit-based model on{" "}
+            <span className="text-edge-pale">:8000</span>. Keep the ledger
+            window open, then click Refresh.
             {summary.error && (
               <span className="text-edge-salmon"> · {summary.error}</span>
             )}
@@ -72,83 +74,123 @@ export function SimulationStrip() {
   }
 
   const online = summary.executionLabel === "ONLINE";
+  const retTone =
+    summary.returnPct > 0
+      ? "good"
+      : summary.returnPct < 0
+      ? "bad"
+      : "mute";
   const rpnlTone =
     summary.realizedPnL > 0
       ? "good"
       : summary.realizedPnL < 0
       ? "bad"
       : "mute";
-  const upnlTone =
-    summary.unrealizedPnL > 0
-      ? "good"
-      : summary.unrealizedPnL < 0
-      ? "bad"
-      : "mute";
+  const last = summary.lastDecision;
 
   return (
-    <div className="panel flex items-stretch overflow-x-auto scrollbar">
-      <div className="flex items-center gap-2 px-3 py-2 border-r border-edge-crimson/40 bg-edge-crimson/10 min-w-[160px]">
-        <span
-          className={
-            "text-xxs uppercase tracking-widest " +
-            (online ? "text-edge-green" : "text-edge-amber")
-          }
-        >
-          ● Sim {summary.executionLabel}
-        </span>
-        <button
-          onClick={() => refresh()}
-          className="ml-auto border border-edge-crimson/40 text-edge-dim text-xxs px-2 py-[1px] hover:text-edge-pale"
-          title="Refresh ledger"
-        >
-          {loading ? "…" : "↻"}
-        </button>
+    <div className="panel flex flex-col">
+      <div className="flex items-stretch overflow-x-auto scrollbar border-b border-edge-crimson/25">
+        <div className="flex items-center gap-2 px-3 py-2 border-r border-edge-crimson/40 bg-edge-crimson/10 min-w-[150px]">
+          <span
+            className={
+              "text-xxs uppercase tracking-widest " +
+              (online ? "text-edge-green" : "text-edge-amber")
+            }
+          >
+            ● Model {summary.executionLabel}
+          </span>
+          <button
+            onClick={() => refresh()}
+            className="ml-auto border border-edge-crimson/40 text-edge-dim text-xxs px-2 py-[1px] hover:text-edge-pale"
+            title="Refresh ledger"
+          >
+            {loading ? "…" : "↻"}
+          </button>
+        </div>
+        <Cell
+          label="Deposit"
+          value={fmtGBP(summary.deposit)}
+          sub="funded capital"
+        />
+        <Cell
+          label="Cash"
+          value={fmtGBP(summary.cash)}
+          sub="available to deploy"
+        />
+        <Cell
+          label="Equity"
+          value={fmtGBP(summary.equity)}
+          sub={`mark ${summary.markPrice.toFixed(4)}`}
+        />
+        <Cell
+          label="Return"
+          value={`${summary.returnPct >= 0 ? "+" : ""}${summary.returnPct.toFixed(2)}%`}
+          tone={retTone}
+          sub="vs deposit"
+        />
+        <Cell
+          label="Realised PnL"
+          value={fmtPnL(summary.realizedPnL)}
+          tone={rpnlTone}
+          sub="closed trades"
+        />
+        <Cell
+          label="Orders / Fills"
+          value={`${summary.ordersSubmitted}`}
+          tone="good"
+          sub={`${summary.buys} buys · ${summary.sells} sells`}
+        />
       </div>
-      <Cell
-        label="Orders Submitted"
-        value={summary.ordersSubmitted.toLocaleString()}
-        sub={`${summary.buys} buys · ${summary.sells} sells`}
-      />
-      <Cell
-        label="Trades Completed"
-        value={summary.tradesCompleted.toLocaleString()}
-        tone="good"
-        sub={
-          summary.last2hFills
-            ? `last 2h · ${summary.last2hFills}`
-            : `${summary.ordersPending} queued`
-        }
-      />
-      <Cell
-        label="Queued Orders"
-        value={summary.ordersPending.toLocaleString()}
-        tone={summary.ordersPending ? "warn" : "mute"}
-        sub="pending automations"
-      />
-      <Cell
-        label="Realised PnL"
-        value={fmtPnL(summary.realizedPnL)}
-        tone={rpnlTone}
-        sub="settled fills"
-      />
-      <Cell
-        label="Unrealised PnL"
-        value={fmtPnL(summary.unrealizedPnL)}
-        tone={upnlTone}
-        sub={`${summary.positions.length} open position${
-          summary.positions.length === 1 ? "" : "s"
-        }`}
-      />
-      <Cell
-        label="Source"
-        value=":8000"
-        tone="mute"
-        sub={
-          summary.fetchedAt
-            ? `updated ${new Date(summary.fetchedAt).toISOString().slice(11, 19)} UTC`
-            : "—"
-        }
-      />
+
+      <div className="flex items-center gap-3 px-3 py-2 text-xxs">
+        <span className="text-edge-dim uppercase tracking-widest">Fund</span>
+        <span className="text-edge-dim">£</span>
+        <input
+          type="number"
+          min={10}
+          step={50}
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="w-24 bg-bg-1 border border-edge-crimson/50 px-2 py-[2px] text-edge-text tabular focus:outline-none focus:border-edge-pale"
+        />
+        <button
+          onClick={() => {
+            const n = Number(amount);
+            if (Number.isFinite(n) && n >= 10) fundDeposit(n);
+          }}
+          className="border border-edge-crimson text-edge-pale px-3 py-[2px] hover:bg-edge-crimson/20 uppercase"
+          title="Sets deposit, resets trades, starts the model from cash"
+        >
+          Set Deposit & Restart Model
+        </button>
+        <span className="text-edge-dim">
+          Resets positions/trades and funds cash = deposit. Model then buys/sells
+          only when it sees an opportunity.
+        </span>
+      </div>
+
+      {last && (
+        <div className="px-3 py-2 border-t border-edge-crimson/25 text-xxs flex gap-3 items-start">
+          <span
+            className={
+              "uppercase tracking-widest shrink-0 " +
+              (last.action === "BUY"
+                ? "text-edge-green"
+                : last.action === "SELL"
+                ? "text-edge-salmon"
+                : "text-edge-amber")
+            }
+          >
+            Last {last.action}
+          </span>
+          <span className="text-edge-text leading-snug">{last.reason}</span>
+          <span className="text-edge-dim ml-auto tabular shrink-0">
+            score {last.score.toFixed(2)} ·{" "}
+            {new Date(last.at).toISOString().slice(11, 19)} UTC
+          </span>
+        </div>
+      )}
     </div>
   );
 }

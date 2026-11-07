@@ -72,13 +72,14 @@ if "%NEEDS_INSTALL%"=="1" (
 )
 
 REM --- Port 8000: simulation ledger API (REQUIRED for orders / fills / PnL) ---
-if not exist "%ROOT%\backend\server.mjs" (
-  echo WARNING: backend\server.mjs not found — simulation ledger cannot start.
+if not exist "%ROOT%\backend\server.ts" if not exist "%ROOT%\backend\server.mjs" (
+  echo WARNING: backend\server.ts not found — simulation ledger cannot start.
 ) else (
   powershell -NoProfile -Command "try { (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 2).StatusCode } catch { exit 1 }" >nul 2>&1
   if errorlevel 1 (
-    echo Starting simulation ledger API on port 8000...
-    start "Kalici Ledger API :8000 - KEEP OPEN" /D "%ROOT%" cmd /k node backend\server.mjs
+    echo Starting deposit-based simulation ledger on port 8000...
+    REM Prefer the TypeScript server (decision engine + capital account).
+    start "Kalici Ledger API :8000 - KEEP OPEN" /D "%ROOT%" cmd /k npx tsx backend/server.ts
   ) else (
     echo Ledger API already running on port 8000.
   )

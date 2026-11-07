@@ -20,8 +20,8 @@ if errorlevel 1 (
 
 cd /d "%ROOT%"
 
-if not exist "%ROOT%\backend\server.mjs" (
-  echo ERROR: backend\server.mjs not found. Wrong folder?
+if not exist "%ROOT%\backend\server.ts" if not exist "%ROOT%\backend\server.mjs" (
+  echo ERROR: backend\server.ts not found. Wrong folder?
   pause
   exit /b 1
 )
@@ -30,7 +30,7 @@ REM --- Port 8000: ledger API (REQUIRED) ---
 powershell -NoProfile -Command "try { (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 2).StatusCode } catch { exit 1 }" >nul 2>&1
 if errorlevel 1 (
   echo Starting ledger API on port 8000...
-  start "Kalici Ledger API - KEEP OPEN" /D "%ROOT%" cmd /k node backend\server.mjs
+  start "Kalici Ledger API - KEEP OPEN" /D "%ROOT%" cmd /k npx tsx backend/server.ts
 )
 
 set "API_OK=0"

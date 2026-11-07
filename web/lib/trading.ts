@@ -1,6 +1,8 @@
 export type { TradingSnapshotWithAutomation } from "./automation";
 export type { TradingSnapshotWithSchedule } from "./realization";
 
+import type { CapitalAccount } from "./capital";
+import { DEFAULT_DEPOSIT_GBP, freshCapital } from "./capital";
 import { isGbpQuoted } from "./symbols";
 
 export type TradeSide = "buy" | "sell";
@@ -35,15 +37,18 @@ export interface TradingSnapshot {
   executionState: ExecutionState;
   trades: Trade[];
   openPositions: OpenPosition[];
+  /** Deposit-funded account the opportunity model trades with. */
+  capital?: CapitalAccount;
 }
 
-export const SCHEMA_VERSION = 8;
-export const STORAGE_KEY = "kalici.trading.v8";
+export const SCHEMA_VERSION = 9;
+export const STORAGE_KEY = "kalici.trading.v9";
 
 /** Older ledger keys — wiped on clean restart. */
 export const LEGACY_STORAGE_KEYS = [
   "kalici.trading.snapshot",
   "kalici.trading.v7",
+  "kalici.trading.v8",
   STORAGE_KEY,
 ] as const;
 
@@ -91,11 +96,13 @@ export function tradesForSymbol(trades: Trade[], symbol: string): Trade[] {
 
 export function isLegacySnapshot(snapshot: TradingSnapshot): boolean {
   if (snapshot.schemaVersion < SCHEMA_VERSION) return true;
-  const hasXrp = snapshot.trades.some((t) => t.symbol === "XRP-USD");
+  if (!snapshot.capital || typeof snapshot.capital.deposit !== "number") {
+    return true;
+  }
   const missingOrderType = snapshot.trades.some(
     (t) => isSettledFill(t) && !("orderType" in t && t.orderType)
   );
-  return !hasXrp || missingOrderType;
+  return missingOrderType;
 }
 
 export function containsCorruptHistory(snapshot: TradingSnapshot): boolean {
@@ -135,49 +142,16 @@ export function sanitize(snapshot: TradingSnapshot): TradingSnapshot {
   return { ...snapshot, trades, schemaVersion: SCHEMA_VERSION };
 }
 
-const XRP_LOT = 6.388578;
-
-export function cleanBootstrap(): TradingSnapshot {
-  const now = Date.now();
-  const buyAt = new Date(now - 3 * 3600_000).toISOString();
-  const sellAt = new Date(now - 2.5 * 3600_000).toISOString();
-  const buyPrice = 1.1611;
-  const sellPrice = 1.1454;
-  const realized =
-    Math.round((sellPrice - buyPrice) * XRP_LOT * 10000) / 10000;
-
+/** Fresh deposit-funded account — no seed fills; the model trades from cash. */
+export function cleanBootstrap(
+  deposit = DEFAULT_DEPOSIT_GBP
+): TradingSnapshot {
   return {
     schemaVersion: SCHEMA_VERSION,
     executionState: "running",
     openPositions: [],
-    trades: [
-      {
-        id: "xrp-buy-1",
-        symbol: "XRP-USD",
-        side: "buy",
-        orderType: "MARKET",
-        quantity: XRP_LOT,
-        executionPrice: buyPrice,
-        executedAt: buyAt,
-        orderReference: "LOCAL-134807",
-        source: "local",
-        status: "filled",
-        realizedPnL: null,
-      },
-      {
-        id: "xrp-sell-1",
-        symbol: "XRP-USD",
-        side: "sell",
-        orderType: "MARKET",
-        quantity: XRP_LOT,
-        executionPrice: sellPrice,
-        executedAt: sellAt,
-        orderReference: "LOCAL-141913",
-        source: "local",
-        status: "filled",
-        realizedPnL: realized,
-      },
-    ],
+    trades: [],
+    capital: freshCapital(deposit),
   };
 }
 

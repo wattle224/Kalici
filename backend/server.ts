@@ -7,10 +7,16 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { activitySummary } from "../web/lib/automation";
+import {
+  equityValue,
+  returnPct,
+  totalRealizedFromTrades,
+} from "../web/lib/capital";
+import { setDeposit } from "../web/lib/decisionEngine";
 import { getExecutionStatus } from "../web/lib/executionStatus";
 import { hydrateSnapshot } from "../web/lib/hydrate";
-import { totalRealizedPnL } from "../web/lib/realization";
 import {
+  SCHEMA_VERSION,
   cleanBootstrap,
   settledFills,
   skippedWhilePaused,
@@ -36,7 +42,18 @@ function loadStore(): TradingSnapshotWithAutomation {
   }
   try {
     const raw = readFileSync(LEDGER_FILE, "utf8");
-    return hydrateSnapshot(JSON.parse(raw) as TradingSnapshotWithAutomation);
+    const parsed = JSON.parse(raw) as TradingSnapshotWithAutomation;
+    // Pre-deposit ledgers (schema < 9 / no capital) start a fresh funded account.
+    if (
+      !parsed.capital ||
+      typeof parsed.capital.deposit !== "number" ||
+      (parsed.schemaVersion ?? 0) < SCHEMA_VERSION
+    ) {
+      const fresh = hydrateSnapshot(cleanBootstrap());
+      saveStore(fresh);
+      return fresh;
+    }
+    return hydrateSnapshot(parsed);
   } catch {
     const fresh = hydrateSnapshot(cleanBootstrap());
     saveStore(fresh);
@@ -64,6 +81,16 @@ function buildLedgerPayload(snapshot: TradingSnapshotWithAutomation, now = Date.
     snapshot.pendingAutomations,
     now
   );
+  const capital = snapshot.capital;
+  const mark = capital?.markPrice ?? 1.1611;
+  const cash = capital?.cash ?? 0;
+  const deposit = capital?.deposit ?? 0;
+  const equity = equityValue(cash, snapshot.openPositions, mark);
+  const realized = totalRealizedFromTrades(snapshot.trades);
+  const unrealized = snapshot.openPositions.reduce(
+    (s, p) => s + (p.unrealizedPnL ?? 0),
+    0
+  );
   return {
     ok: true,
     execution,
@@ -74,8 +101,17 @@ function buildLedgerPayload(snapshot: TradingSnapshotWithAutomation, now = Date.
     last2Hours: activity,
     skippedWhilePaused: skippedWhilePaused(snapshot.trades),
     pendingAutomations: snapshot.pendingAutomations ?? [],
-    totalRealizedPnL: totalRealizedPnL(snapshot.trades),
-    realisedPnL: totalRealizedPnL(snapshot.trades),
+    totalRealizedPnL: realized,
+    realisedPnL: realized,
+    unrealizedPnL: unrealized,
+    capital,
+    deposit,
+    cash,
+    equity,
+    returnPct: returnPct(equity, deposit),
+    markPrice: mark,
+    lastDecision: capital?.decisions?.[0] ?? null,
+    decisions: capital?.decisions ?? [],
     symbols: [...new Set(history.map((t) => t.symbol))].sort(),
     snapshot,
   };
@@ -133,7 +169,12 @@ const server = createServer(async (req, res) => {
     (path === "/api/ledger" || path === "/ledger" || path === "/api/trading") &&
     method === "POST"
   ) {
-    let body: { action?: string; snapshot?: TradingSnapshotWithAutomation } = {};
+    let body: {
+      action?: string;
+      amount?: number;
+      deposit?: number;
+      snapshot?: TradingSnapshotWithAutomation;
+    } = {};
     try {
       const raw = await readBody(req);
       if (raw) body = JSON.parse(raw);
@@ -143,7 +184,25 @@ const server = createServer(async (req, res) => {
     }
 
     if (body.action === "clean-restart") {
-      const snapshot = hydrateSnapshot(cleanBootstrap());
+      const amount = Number(body.amount ?? body.deposit);
+      const snapshot = hydrateSnapshot(
+        cleanBootstrap(Number.isFinite(amount) && amount > 0 ? amount : undefined)
+      );
+      saveStore(snapshot);
+      json(res, 200, { ok: true, ...buildLedgerPayload(snapshot) });
+      return;
+    }
+
+    if (body.action === "set-deposit") {
+      const amount = Number(body.amount ?? body.deposit);
+      if (!Number.isFinite(amount) || amount < 10) {
+        json(res, 400, {
+          ok: false,
+          error: "amount must be a number >= 10",
+        });
+        return;
+      }
+      const snapshot = hydrateSnapshot(setDeposit(loadStore(), amount));
       saveStore(snapshot);
       json(res, 200, { ok: true, ...buildLedgerPayload(snapshot) });
       return;
@@ -156,7 +215,11 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    json(res, 400, { ok: false, error: "Unknown action" });
+    json(res, 400, {
+      ok: false,
+      error: "Unknown action",
+      hint: 'Use { "action": "set-deposit", "amount": 1000 } or "clean-restart"',
+    });
     return;
   }
 
