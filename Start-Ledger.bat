@@ -28,9 +28,9 @@ if not exist "%ROOT%\backend\server.mjs" if not exist "%ROOT%\backend\server.ts"
 )
 
 REM Kill anything already listening on 8000 (stale / outdated builds).
-powershell -NoProfile -Command ^
-  "$conns = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue; ^
-   foreach ($c in $conns) { try { Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue } catch {} }" >nul 2>&1
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":8000 " ^| findstr "LISTENING"') do (
+  if not "%%P"=="0" taskkill /F /PID %%P >nul 2>&1
+)
 timeout /t 1 /nobreak >nul
 
 echo Starting deposit ledger...
@@ -38,15 +38,16 @@ echo KEEP THIS WINDOW OPEN while you use QUANTEDGE.
 echo.
 cd /d "%ROOT%"
 
-if exist "%ROOT%\backend\server.ts" (
-  npx tsx backend/server.ts
+if exist "%ROOT%\backend\server.mjs" (
+  node backend\server.mjs
+) else (
+  npx.cmd tsx backend\server.ts
   if errorlevel 1 (
     echo.
-    echo tsx failed — falling back to node backend/server.mjs
-    node backend/server.mjs
+    echo tsx failed.
+    pause
+    exit /b 1
   )
-) else (
-  node backend/server.mjs
 )
 
 echo.

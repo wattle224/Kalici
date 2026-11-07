@@ -32,8 +32,15 @@ if "%ERR%" NEQ "0" (
 
 echo.
 echo SUCCESS - look on your Desktop for:
-echo   QUANTEDGE Terminal.lnk              (double-click to launch)
-echo   QUANTEDGE Terminal (Update).lnk     (git pull + launch)
+echo   QUANTEDGE Terminal.lnk              (launch)
+echo   QUANTEDGE Terminal (Update).lnk     (git pull + launch)  ^<-- use this
+echo   Update-And-Launch-QuantEdge.bat     (same as Update shortcut)
+echo   Launch-QuantEdge.bat                (launch without git pull)
+echo   QUANTEDGE Ledger.lnk                (ledger only on :8000)
+echo.
+echo If Update still fails, open quantedge-update.log / quantedge-launch.log
+echo in the Kalici repo folder for the error.
 echo.
 pause
 exit /b 0
+
