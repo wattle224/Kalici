@@ -44,16 +44,18 @@ export const useLedgerStore = create<LedgerState>((set) => ({
       const payload = await postDeposit(amount);
       set({ summary: summariseLedger(payload), loading: false });
     } catch (e) {
-      set({
+      const msg =
+        e instanceof Error ? e.message : "Could not set deposit";
+      // Keep prior connected state so a fund failure doesn't look like
+      // a total ledger outage (common when only the Next proxy is broken).
+      set((state) => ({
         loading: false,
         summary: {
-          ...EMPTY_SUMMARY,
-          connected: false,
-          error:
-            e instanceof Error ? e.message : "Could not set deposit",
+          ...state.summary,
+          error: `Fund failed: ${msg}`,
           fetchedAt: Date.now(),
         },
-      });
+      }));
     }
   },
 }));

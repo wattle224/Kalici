@@ -73,19 +73,23 @@ if "%NEEDS_INSTALL%"=="1" (
 
 REM --- Port 8000: simulation ledger API (REQUIRED for orders / fills / PnL) ---
 if not exist "%ROOT%\backend\server.ts" if not exist "%ROOT%\backend\server.mjs" (
-  echo WARNING: backend\server.ts not found — simulation ledger cannot start.
+  echo WARNING: backend\server.ts / server.mjs not found — simulation ledger cannot start.
 ) else (
   powershell -NoProfile -Command "try { (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 2).StatusCode } catch { exit 1 }" >nul 2>&1
   if errorlevel 1 (
     echo Starting deposit-based simulation ledger on port 8000...
-    REM Prefer the TypeScript server (decision engine + capital account).
-    start "Kalici Ledger API :8000 - KEEP OPEN" /D "%ROOT%" cmd /k npx tsx backend/server.ts
+    REM Prefer TypeScript server; fall back to pure Node server.mjs (no tsx).
+    if exist "%ROOT%\backend\server.ts" (
+      start "Kalici Ledger API :8000 - KEEP OPEN" /D "%ROOT%" cmd /k "npx tsx backend/server.ts || (echo. & echo tsx failed — falling back to node backend/server.mjs & node backend/server.mjs)"
+    ) else (
+      start "Kalici Ledger API :8000 - KEEP OPEN" /D "%ROOT%" cmd /k node backend/server.mjs
+    )
   ) else (
     echo Ledger API already running on port 8000.
   )
 
   set "LEDGER_OK=0"
-  for /L %%i in (1,1,20) do (
+  for /L %%i in (1,1,25) do (
     powershell -NoProfile -Command "try { (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 2).StatusCode } catch { exit 1 }" >nul 2>&1
     if not errorlevel 1 (
       set "LEDGER_OK=1"
@@ -95,8 +99,9 @@ if not exist "%ROOT%\backend\server.ts" if not exist "%ROOT%\backend\server.mjs"
   )
   :ledger_ready
   if "!LEDGER_OK!"=="0" (
-    echo WARNING: Ledger API did not answer on :8000 within 20s.
+    echo WARNING: Ledger API did not answer on :8000 within 25s.
     echo Check the "Kalici Ledger API :8000 - KEEP OPEN" window for errors.
+    echo Tip: close any old ledger window, then run:  node backend\server.mjs
   ) else (
     echo Ledger API OK: http://127.0.0.1:8000/health
   )

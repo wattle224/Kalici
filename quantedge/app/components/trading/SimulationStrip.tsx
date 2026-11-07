@@ -143,7 +143,7 @@ export function SimulationStrip() {
         />
       </div>
 
-      <div className="flex items-center gap-3 px-3 py-2 text-xxs">
+      <div className="flex items-center gap-3 px-3 py-2 text-xxs flex-wrap">
         <span className="text-edge-dim uppercase tracking-widest">Fund</span>
         <span className="text-edge-dim">£</span>
         <input
@@ -159,15 +159,19 @@ export function SimulationStrip() {
             const n = Number(amount);
             if (Number.isFinite(n) && n >= 10) fundDeposit(n);
           }}
-          className="border border-edge-crimson text-edge-pale px-3 py-[2px] hover:bg-edge-crimson/20 uppercase"
+          disabled={loading}
+          className="border border-edge-crimson text-edge-pale px-3 py-[2px] hover:bg-edge-crimson/20 uppercase disabled:opacity-50"
           title="Sets deposit, resets trades, starts the model from cash"
         >
-          Set Deposit & Restart Model
+          {loading ? "Funding…" : "Set Deposit & Restart Model"}
         </button>
         <span className="text-edge-dim">
           Resets positions/trades and funds cash = deposit. Model then buys/sells
           only when it sees an opportunity.
         </span>
+        {summary.error && (
+          <span className="text-edge-salmon w-full">{summary.error}</span>
+        )}
       </div>
 
       {last && (

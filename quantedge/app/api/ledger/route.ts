@@ -13,15 +13,19 @@ const UPSTREAMS = [
 
 async function fetchUpstream(
   init?: RequestInit
-): Promise<Response | null> {
+): Promise<{ res: Response; url: string } | null> {
   for (const url of UPSTREAMS) {
     try {
       const res = await fetch(url, {
         cache: "no-store",
-        signal: AbortSignal.timeout(4000),
+        signal: AbortSignal.timeout(5000),
         ...init,
       });
-      if (res.ok) return res;
+      // Accept any JSON response (incl. 400 validation errors) from a live ledger.
+      const ctype = res.headers.get("content-type") ?? "";
+      if (ctype.includes("application/json") || res.ok) {
+        return { res, url };
+      }
     } catch {
       /* try next */
     }
@@ -132,44 +136,72 @@ function readLedgerFile() {
 }
 
 export async function GET() {
-  const upstream = await fetchUpstream();
-  if (upstream) {
-    const body = await upstream.json();
-    return NextResponse.json({ ...body, source: "api:8000" });
-  }
+  try {
+    const upstream = await fetchUpstream();
+    if (upstream) {
+      const body = await upstream.res.json();
+      return NextResponse.json(
+        { ...body, source: "api:8000" },
+        { status: upstream.res.status }
+      );
+    }
 
-  const file = readLedgerFile();
-  if (file) {
-    return NextResponse.json(file);
-  }
+    const file = readLedgerFile();
+    if (file) {
+      return NextResponse.json(file);
+    }
 
-  return NextResponse.json(
-    {
-      ok: false,
-      error:
-        "Ledger unreachable on :8000 and no backend/data/ledger.json found. Start Launch-QuantEdge.bat.",
-    },
-    { status: 503 }
-  );
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Ledger unreachable on :8000 and no backend/data/ledger.json found. Start Launch-QuantEdge.bat.",
+      },
+      { status: 503 }
+    );
+  } catch (err) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          err instanceof Error ? err.message : "Ledger proxy GET failed",
+      },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(request: Request) {
-  const body = await request.text();
-  const upstream = await fetchUpstream({
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
-  });
-  if (upstream) {
-    const data = await upstream.json();
-    return NextResponse.json({ ...data, source: "api:8000" });
+  try {
+    const body = await request.text();
+    const upstream = await fetchUpstream({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    if (upstream) {
+      const data = await upstream.res.json();
+      return NextResponse.json(
+        { ...data, source: "api:8000" },
+        { status: upstream.res.status }
+      );
+    }
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Cannot set deposit — ledger API on :8000 is not running. Start Launch-QuantEdge.bat (keep the ledger window open).",
+      },
+      { status: 503 }
+    );
+  } catch (err) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          err instanceof Error ? err.message : "Ledger proxy POST failed",
+      },
+      { status: 500 }
+    );
   }
-  return NextResponse.json(
-    {
-      ok: false,
-      error:
-        "Cannot set deposit — ledger API on :8000 is not running. Start Launch-QuantEdge.bat.",
-    },
-    { status: 503 }
-  );
 }

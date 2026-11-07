@@ -133,21 +133,39 @@ async function tryFetch(
   init?: RequestInit
 ): Promise<LedgerPayload> {
   const res = await fetch(url, { cache: "no-store", ...init });
-  if (!res.ok) {
-    let detail = `HTTP ${res.status}`;
-    try {
-      const err = (await res.json()) as { error?: string };
-      if (err?.error) detail = err.error;
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail);
+  const ctype = res.headers.get("content-type") ?? "";
+  const text = await res.text();
+
+  // Next.js / proxy crashes often return HTML 500 pages — treat as hard fail
+  // so we fall through to the direct :8000 ledger URL.
+  if (
+    ctype.includes("text/html") ||
+    text.trimStart().startsWith("<!DOCTYPE") ||
+    text.trimStart().startsWith("<html")
+  ) {
+    throw new Error(
+      `Proxy returned HTML (${res.status}) — trying direct ledger`
+    );
   }
-  return (await res.json()) as LedgerPayload;
+
+  let data: LedgerPayload & { error?: string } = {};
+  try {
+    data = text ? (JSON.parse(text) as LedgerPayload & { error?: string }) : {};
+  } catch {
+    throw new Error(
+      `Non-JSON ledger response (${res.status}): ${text.slice(0, 120)}`
+    );
+  }
+
+  if (!res.ok) {
+    throw new Error(data.error ?? `HTTP ${res.status}`);
+  }
+  return data;
 }
 
 export async function fetchLedger(): Promise<LedgerPayload> {
   let last: Error | null = null;
+  // Prefer same-origin proxy, then direct :8000 (CORS-safe on localhost).
   for (const url of LEDGER_URLS) {
     try {
       return await tryFetch(url);
@@ -163,14 +181,21 @@ export async function fetchLedger(): Promise<LedgerPayload> {
   );
 }
 
+/** Prefer direct :8000 — funding must reach the live ledger, not a stale proxy. */
+const FUND_URLS = [
+  "http://127.0.0.1:8000/api/ledger",
+  "http://127.0.0.1:8000/api/trading",
+  "http://localhost:8000/api/ledger",
+  "/api/ledger",
+];
+
 export async function setDeposit(amount: number): Promise<LedgerPayload> {
+  if (!Number.isFinite(amount) || amount < 10) {
+    throw new Error("Deposit must be a number ≥ 10");
+  }
   const body = JSON.stringify({ action: "set-deposit", amount });
   let last: Error | null = null;
-  for (const url of [
-    "/api/ledger",
-    "http://127.0.0.1:8000/api/ledger",
-    "http://127.0.0.1:8000/api/trading",
-  ]) {
+  for (const url of FUND_URLS) {
     try {
       return await tryFetch(url, {
         method: "POST",
@@ -181,7 +206,12 @@ export async function setDeposit(amount: number): Promise<LedgerPayload> {
       last = e instanceof Error ? e : new Error("fetch failed");
     }
   }
-  throw last ?? new Error("Could not set deposit");
+  throw (
+    last ??
+    new Error(
+      "Could not set deposit — start Launch-QuantEdge.bat and keep the ledger window open."
+    )
+  );
 }
 
 export function summariseLedger(payload: LedgerPayload): SimulationSummary {
