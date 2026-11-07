@@ -244,6 +244,46 @@ export function SimulationStrip() {
           </span>
         </div>
       )}
+
+      {summary.recentFills.length > 0 && (
+        <div className="px-3 py-2 border-t border-edge-crimson/25 text-xxs overflow-x-auto scrollbar">
+          <div className="text-edge-dim uppercase tracking-widest mb-1">
+            Recent fills · bought / sold
+          </div>
+          <div className="flex gap-2 min-w-max">
+            {summary.recentFills.slice(0, 8).map((f) => {
+              const notional = f.quantity * f.executionPrice;
+              return (
+                <div
+                  key={f.id}
+                  className="border border-edge-crimson/30 px-2 py-1 flex items-center gap-2"
+                >
+                  <span
+                    className={
+                      "uppercase " +
+                      (f.side === "buy"
+                        ? "text-edge-green"
+                        : "text-edge-salmon")
+                    }
+                  >
+                    {f.side === "buy" ? "BUY" : "SELL"}
+                  </span>
+                  <span className="text-edge-pale">{f.symbol}</span>
+                  <span className="text-edge-text tabular">
+                    {f.quantity.toFixed(2)} @ {f.executionPrice.toFixed(4)}
+                  </span>
+                  <span className="text-edge-dim tabular">
+                    {fmtGBP(notional)}
+                  </span>
+                  <span className="text-edge-dim tabular">
+                    {new Date(f.executedAt).toISOString().slice(11, 19)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { Panel } from "../components/Panel";
 import { InstrumentSearch } from "../components/trading/InstrumentSearch";
 import { CandlestickChart } from "../components/trading/CandlestickChart";
 import { OrderBook } from "../components/trading/OrderBook";
-import { RecentTrades } from "../components/trading/RecentTrades";
+import { ModelFills } from "../components/trading/ModelFills";
 import { PortfolioPanel } from "../components/trading/PortfolioPanel";
 import { AIAnalyst } from "../components/trading/AIAnalyst";
 import { TechIndicators } from "../components/trading/TechIndicators";
@@ -81,8 +81,17 @@ export default function TradingWorkspace() {
           <Panel title="Technicals" code="TRD-TA" className="flex-1">
             <TechIndicators symbol={instr.symbol} />
           </Panel>
-          <Panel title="Recent Trades" code="TRD-RT" className="flex-1">
-            <RecentTrades last={instr.last} />
+          <Panel
+            title={
+              sim.connected
+                ? `Model Fills · ${sim.buys} buys · ${sim.sells} sells`
+                : "Model Fills · Bought / Sold"
+            }
+            code="TRD-FILL"
+            right={sim.connected ? "live ledger" : "offline"}
+            className="flex-1"
+          >
+            <ModelFills />
           </Panel>
         </div>
 
@@ -90,8 +99,8 @@ export default function TradingWorkspace() {
           <Panel
             title={
               sim.connected
-                ? `Simulation · ${sim.ordersSubmitted} orders · ${sim.tradesCompleted} fills · RPNL ${fmtPnL(sim.realizedPnL)}`
-                : "Simulation · Positions & Orders"
+                ? `Bought & Sold · ${sim.buys}B / ${sim.sells}S · RPNL ${fmtPnL(sim.realizedPnL)}`
+                : "Bought & Sold · Positions"
             }
             code="TRD-PRT"
             right={sim.connected ? sim.executionLabel : "ledger offline"}
