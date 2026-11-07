@@ -13,6 +13,24 @@ echo  QUANTEDGE Terminal
 echo  ==================
 echo  Root: %ROOT%
 echo  App:  %APP%
+
+REM Show which git revision this launcher is about to run, so the user
+REM can tell at a glance whether the Desktop shortcut is on the latest
+REM version. Harmless if git is missing or this is not a git checkout.
+where git >nul 2>&1
+if not errorlevel 1 (
+  if exist "%ROOT%\.git" (
+    pushd "%ROOT%" >nul
+    for /f "delims=" %%b in ('git rev-parse --abbrev-ref HEAD 2^>nul') do set "QE_BRANCH=%%b"
+    for /f "delims=" %%s in ('git rev-parse --short HEAD 2^>nul') do set "QE_SHA=%%s"
+    for /f "delims=" %%d in ('git log -1 --format=%%cs HEAD 2^>nul') do set "QE_DATE=%%d"
+    popd >nul
+    if defined QE_BRANCH echo  Branch: !QE_BRANCH!
+    if defined QE_SHA echo  Commit: !QE_SHA!  ^(!QE_DATE!^)
+    echo  Tip: use "Update-And-Launch-QuantEdge.bat" or the "QUANTEDGE Terminal (Update)" shortcut
+    echo       on your Desktop to pull the newest commit before launching.
+  )
+)
 echo.
 
 where node >nul 2>&1
@@ -34,8 +52,17 @@ if not exist "%APP%\package.json" (
 
 cd /d "%APP%"
 
-if not exist "%APP%\node_modules" (
-  echo Installing QUANTEDGE dependencies ^(first run only, ~30s^)...
+set "NEEDS_INSTALL=0"
+if not exist "%APP%\node_modules" set "NEEDS_INSTALL=1"
+REM If npm's own install sentinel is older than package-lock.json, deps are stale
+REM (e.g. you just ran git pull and package-lock.json changed). npm writes this
+REM file after install completes, so comparing against it is robust across locales.
+if exist "%APP%\package-lock.json" if exist "%APP%\node_modules\.package-lock.json" (
+  for /f %%A in ('powershell -NoProfile -Command "if ((Get-Item '%APP%\package-lock.json').LastWriteTime -gt (Get-Item '%APP%\node_modules\.package-lock.json').LastWriteTime) { 'yes' } else { 'no' }"') do set "STALE=%%A"
+  if /I "!STALE!"=="yes" set "NEEDS_INSTALL=1"
+)
+if "%NEEDS_INSTALL%"=="1" (
+  echo Installing QUANTEDGE dependencies ^(first run or package-lock.json changed, ~30s^)...
   call npm install
   if errorlevel 1 (
     echo npm install failed.
