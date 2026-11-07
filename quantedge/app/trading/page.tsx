@@ -9,12 +9,16 @@ import { RecentTrades } from "../components/trading/RecentTrades";
 import { PortfolioPanel } from "../components/trading/PortfolioPanel";
 import { AIAnalyst } from "../components/trading/AIAnalyst";
 import { TechIndicators } from "../components/trading/TechIndicators";
+import { SimulationStrip } from "../components/trading/SimulationStrip";
 import { useAppStore } from "../store/useAppStore";
+import { useLedgerStore } from "../store/useLedgerStore";
+import { fmtPnL } from "../lib/ledgerApi";
 
 export default function TradingWorkspace() {
   const setWorkspace = useAppStore((s) => s.setWorkspace);
   const instr = useAppStore((s) => s.selectedInstrument);
   const compare = useAppStore((s) => s.compareInstruments);
+  const sim = useLedgerStore((s) => s.summary);
   useEffect(() => setWorkspace("trading"), [setWorkspace]);
 
   return (
@@ -25,7 +29,9 @@ export default function TradingWorkspace() {
             WS-02 · Trading & Portfolio Analysis
           </span>
           <span className="text-edge-dim text-xxs">
-            SIMULATED DATA · drag chart · universal search below
+            {sim.connected
+              ? `LIVE LEDGER · :8000 · ${sim.executionLabel} · ${sim.tradesCompleted} fills · RPNL ${fmtPnL(sim.realizedPnL)}`
+              : "LEDGER OFFLINE · start :8000 to see your simulation orders / fills / PnL"}
           </span>
         </div>
         <div className="text-xxs text-edge-dim">
@@ -38,6 +44,10 @@ export default function TradingWorkspace() {
             {instr.chg.toFixed(2)}%
           </span>
         </div>
+      </div>
+
+      <div className="flex-shrink-0">
+        <SimulationStrip />
       </div>
 
       <div className="flex-shrink-0">
@@ -76,13 +86,22 @@ export default function TradingWorkspace() {
           </Panel>
         </div>
 
-        <div className="col-start-1 col-span-4 row-start-5 row-span-2 min-h-0">
-          <Panel title="Portfolio · Positions & Orders" code="TRD-PRT" className="h-full">
+        <div className="col-start-1 col-span-5 row-start-5 row-span-2 min-h-0">
+          <Panel
+            title={
+              sim.connected
+                ? `Simulation · ${sim.ordersSubmitted} orders · ${sim.tradesCompleted} fills · RPNL ${fmtPnL(sim.realizedPnL)}`
+                : "Simulation · Positions & Orders"
+            }
+            code="TRD-PRT"
+            right={sim.connected ? sim.executionLabel : "ledger offline"}
+            className="h-full"
+          >
             <PortfolioPanel />
           </Panel>
         </div>
 
-        <div className="col-start-5 col-span-3 row-start-5 row-span-2 min-h-0">
+        <div className="col-start-6 col-span-2 row-start-5 row-span-2 min-h-0">
           <Panel
             title="AI Research · Analyst"
             code="TRD-AI"

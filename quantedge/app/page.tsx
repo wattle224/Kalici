@@ -14,11 +14,14 @@ import { Heatmap } from "./components/panels/Heatmap";
 import { EventsFeed } from "./components/panels/EventsFeed";
 import { AssetFilter } from "./components/panels/AssetFilter";
 import { useAppStore } from "./store/useAppStore";
+import { useLedgerStore } from "./store/useLedgerStore";
+import { fmtPnL } from "./lib/ledgerApi";
 import { CENTRES } from "./data/markets";
 
 export default function GlobalWorkspace() {
   const setWorkspace = useAppStore((s) => s.setWorkspace);
   const centre = useAppStore((s) => s.selectedCentre);
+  const sim = useLedgerStore((s) => s.summary);
 
   useEffect(() => {
     setWorkspace("global");
@@ -43,23 +46,53 @@ export default function GlobalWorkspace() {
         code: "F2",
         title: "Order Flow",
         accent: "#ff8a7a",
-        metrics: [
-          { label: "Orders in", value: "8,214", tone: "good" },
-          { label: "Buy / Sell", value: "56% / 44%", tone: "good" },
-          { label: "Imbalance", value: "+0.12σ" },
-          { label: "Rejects", value: "0.9%", tone: "warn" },
-        ],
+        metrics: sim.connected
+          ? [
+              { label: "Orders submitted", value: `${sim.ordersSubmitted}`, tone: "good" },
+              { label: "Trades completed", value: `${sim.tradesCompleted}`, tone: "good" },
+              { label: "Buy / Sell", value: `${sim.buys} / ${sim.sells}` },
+              {
+                label: "Queued",
+                value: `${sim.ordersPending}`,
+                tone: sim.ordersPending ? "warn" : "good",
+              },
+            ]
+          : [
+              { label: "Orders in", value: "—", tone: "warn" },
+              { label: "Trades completed", value: "—", tone: "warn" },
+              { label: "Buy / Sell", value: "ledger offline" },
+              { label: "Queued", value: "—", tone: "warn" },
+            ],
       },
       {
         code: "F3",
         title: "Portfolio",
         accent: "#ffb4a6",
-        metrics: [
-          { label: "Gross exposure", value: "$184.2M" },
-          { label: "Net", value: "$61.4M" },
-          { label: "Unrealised PnL", value: "+$1.21M", tone: "good" },
-          { label: "Util cap", value: "71%" },
-        ],
+        metrics: sim.connected
+          ? [
+              {
+                label: "Realised PnL",
+                value: fmtPnL(sim.realizedPnL),
+                tone: sim.realizedPnL >= 0 ? "good" : "bad",
+              },
+              {
+                label: "Unrealised PnL",
+                value: fmtPnL(sim.unrealizedPnL),
+                tone: sim.unrealizedPnL >= 0 ? "good" : "bad",
+              },
+              { label: "Open positions", value: `${sim.positions.length}` },
+              {
+                label: "Execution",
+                value: sim.executionLabel,
+                tone: sim.executionLabel === "ONLINE" ? "good" : "warn",
+              },
+            ]
+          : [
+              { label: "Realised PnL", value: "—", tone: "warn" },
+              { label: "Unrealised PnL", value: "—", tone: "warn" },
+              { label: "Open positions", value: "ledger offline" },
+              { label: "Execution", value: "OFFLINE", tone: "warn" },
+            ],
       },
       {
         code: "F4",
@@ -95,7 +128,7 @@ export default function GlobalWorkspace() {
         ],
       },
     ],
-    [sel]
+    [sel, sim]
   );
 
   return (

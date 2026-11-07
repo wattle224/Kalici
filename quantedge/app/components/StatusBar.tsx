@@ -1,6 +1,8 @@
 "use client";
 
 import { useAppStore } from "../store/useAppStore";
+import { useLedgerStore } from "../store/useLedgerStore";
+import { fmtPnL } from "../lib/ledgerApi";
 
 export function StatusBar() {
   const workspace = useAppStore((s) => s.workspace);
@@ -8,23 +10,70 @@ export function StatusBar() {
   const centre = useAppStore((s) => s.selectedCentre);
   const face = useAppStore((s) => s.selectedCubeFace);
   const latency = useAppStore((s) => s.latencyMs);
+  const sim = useLedgerStore((s) => s.summary);
+
+  const online = sim.connected && sim.executionLabel === "ONLINE";
+  const rpnlTone =
+    sim.realizedPnL > 0
+      ? "text-edge-green"
+      : sim.realizedPnL < 0
+      ? "text-edge-salmon"
+      : "text-edge-text";
 
   return (
     <div className="absolute inset-x-0 bottom-[32px] h-[38px] z-20 border-t border-edge-crimson/40 bg-bg-1/90 flex items-center text-xxs">
       <div className="flex items-center gap-6 px-4 h-full">
         <span className="text-edge-dim">
-          STATUS <span className="text-edge-green">● LIVE</span>
+          SIM{" "}
+          {sim.connected ? (
+            <span className={online ? "text-edge-green" : "text-edge-amber"}>
+              ● {sim.executionLabel}
+            </span>
+          ) : (
+            <span className="text-edge-salmon">● OFFLINE</span>
+          )}
         </span>
         <span className="text-edge-dim">
-          FEEDS <span className="text-edge-green">41/42</span>{" "}
-          <span className="text-edge-amber">1 DEG</span>
+          ORDERS{" "}
+          <span className="text-edge-text">
+            {sim.connected ? sim.ordersSubmitted.toLocaleString() : "—"}
+          </span>
         </span>
         <span className="text-edge-dim">
-          ORDERS <span className="text-edge-text">8,214</span>{" "}
-          <span className="text-edge-green">▲</span>
+          FILLS{" "}
+          <span className="text-edge-green">
+            {sim.connected ? sim.tradesCompleted.toLocaleString() : "—"}
+          </span>
         </span>
         <span className="text-edge-dim">
-          VAR 1D <span className="text-edge-text">1.42M USD</span>
+          QUEUED{" "}
+          <span
+            className={
+              sim.ordersPending > 0 ? "text-edge-amber" : "text-edge-text"
+            }
+          >
+            {sim.connected ? sim.ordersPending.toLocaleString() : "—"}
+          </span>
+        </span>
+        <span className="text-edge-dim">
+          RPNL{" "}
+          <span className={sim.connected ? rpnlTone : "text-edge-dim"}>
+            {sim.connected ? fmtPnL(sim.realizedPnL) : "—"}
+          </span>
+        </span>
+        <span className="text-edge-dim">
+          UPNL{" "}
+          <span
+            className={
+              !sim.connected
+                ? "text-edge-dim"
+                : sim.unrealizedPnL >= 0
+                ? "text-edge-green"
+                : "text-edge-salmon"
+            }
+          >
+            {sim.connected ? fmtPnL(sim.unrealizedPnL) : "—"}
+          </span>
         </span>
         <span className="text-edge-dim">
           LAT <span className="text-edge-text">{latency}ms</span>
@@ -47,13 +96,10 @@ export function StatusBar() {
           </span>
         </span>
         <span className="text-edge-dim">
-          CPU <span className="text-edge-text">37%</span>
-        </span>
-        <span className="text-edge-dim">
-          MEM <span className="text-edge-text">48%</span>
-        </span>
-        <span className="text-edge-dim">
-          NET <span className="text-edge-green">●</span>
+          LEDGER{" "}
+          <span className={sim.connected ? "text-edge-green" : "text-edge-salmon"}>
+            {sim.connected ? ":8000" : "DOWN"}
+          </span>
         </span>
       </div>
     </div>

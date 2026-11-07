@@ -1,50 +1,58 @@
 "use client";
 
-const POSITIONS = [
-  { sym: "NVDA", qty: 2500, avg: 132.4, last: 141.9, pnl: 23750 },
-  { sym: "AAPL", qty: 1800, avg: 232.1, last: 241.12, pnl: 16236 },
-  { sym: "MSFT", qty: 1200, avg: 428.1, last: 432.21, pnl: 4932 },
-  { sym: "TSLA", qty: -900, avg: 272.5, last: 268.1, pnl: 3960 },
-  { sym: "SPY", qty: 500, avg: 572.4, last: 580.3, pnl: 3950 },
-  { sym: "BTCUSD", qty: 2.1, avg: 68100, last: 72431, pnl: 9094 },
-];
-
-const ORDERS = [
-  { id: "O-4421", sym: "NVDA", side: "BUY", qty: 500, type: "LMT", px: 141.0, status: "WORKING" },
-  { id: "O-4420", sym: "TSLA", side: "SELL", qty: 300, type: "LMT", px: 269.5, status: "WORKING" },
-  { id: "O-4419", sym: "META", side: "BUY", qty: 200, type: "MKT", px: 0, status: "FILLED" },
-  { id: "O-4418", sym: "ETHUSD", side: "BUY", qty: 10, type: "LMT", px: 2550, status: "REJECTED" },
-];
+import { useLedgerStore } from "../../store/useLedgerStore";
+import { fmtPnL } from "../../lib/ledgerApi";
 
 export function PortfolioPanel() {
-  const gross = POSITIONS.reduce((s, p) => s + Math.abs(p.qty) * p.last, 0);
-  const net = POSITIONS.reduce((s, p) => s + p.qty * p.last, 0);
-  const upnl = POSITIONS.reduce((s, p) => s + p.pnl, 0);
+  const summary = useLedgerStore((s) => s.summary);
+
+  if (!summary.connected) {
+    return (
+      <div className="h-full flex items-center justify-center p-4 text-xs text-edge-dim">
+        <div className="text-center max-w-sm">
+          <div className="text-edge-salmon text-xxs uppercase tracking-widest mb-2">
+            Ledger Offline
+          </div>
+          Connect the simulation ledger on{" "}
+          <span className="text-edge-pale">127.0.0.1:8000</span> to see live
+          positions, submitted orders and completed trades here.
+        </div>
+      </div>
+    );
+  }
+
+  const fills = summary.recentFills.slice(0, 40);
+  const pending = summary.pending;
+  const rpnlTone =
+    summary.realizedPnL >= 0 ? "text-edge-green" : "text-edge-salmon";
+  const upnlTone =
+    summary.unrealizedPnL >= 0 ? "text-edge-green" : "text-edge-salmon";
 
   return (
     <div className="h-full flex flex-col text-xs">
-      <div className="grid grid-cols-3 gap-2 p-2 border-b border-edge-crimson/30">
+      <div className="grid grid-cols-4 gap-2 p-2 border-b border-edge-crimson/30">
         <div>
-          <div className="text-edge-dim text-xxs">GROSS EXPOSURE</div>
+          <div className="text-edge-dim text-xxs">ORDERS SUBMITTED</div>
           <div className="text-edge-pale tabular text-sm">
-            ${(gross / 1e6).toFixed(2)}M
+            {summary.ordersSubmitted.toLocaleString()}
           </div>
         </div>
         <div>
-          <div className="text-edge-dim text-xxs">NET</div>
-          <div className="text-edge-pale tabular text-sm">
-            ${(net / 1e6).toFixed(2)}M
+          <div className="text-edge-dim text-xxs">TRADES COMPLETED</div>
+          <div className="text-edge-green tabular text-sm">
+            {summary.tradesCompleted.toLocaleString()}
           </div>
         </div>
         <div>
-          <div className="text-edge-dim text-xxs">UPNL</div>
-          <div
-            className={
-              "tabular text-sm " +
-              (upnl >= 0 ? "text-edge-green" : "text-edge-salmon")
-            }
-          >
-            {upnl >= 0 ? "+" : ""}${upnl.toLocaleString()}
+          <div className="text-edge-dim text-xxs">REALISED PNL</div>
+          <div className={"tabular text-sm " + rpnlTone}>
+            {fmtPnL(summary.realizedPnL)}
+          </div>
+        </div>
+        <div>
+          <div className="text-edge-dim text-xxs">UNREALISED PNL</div>
+          <div className={"tabular text-sm " + upnlTone}>
+            {fmtPnL(summary.unrealizedPnL)}
           </div>
         </div>
       </div>
@@ -52,99 +60,157 @@ export function PortfolioPanel() {
       <div className="flex-1 min-h-0 grid grid-rows-2 gap-2 p-2">
         <div className="overflow-auto scrollbar border border-edge-crimson/20">
           <div className="text-xxs text-edge-crimson/80 px-2 py-1 border-b border-edge-crimson/30 uppercase">
-            Positions
+            Open Positions · {summary.positions.length}
           </div>
-          <table className="w-full tabular">
-            <thead>
-              <tr className="text-xxs text-edge-dim">
-                <th className="text-left px-2 py-1">SYM</th>
-                <th className="text-right px-2 py-1">QTY</th>
-                <th className="text-right px-2 py-1">AVG</th>
-                <th className="text-right px-2 py-1">LAST</th>
-                <th className="text-right px-2 py-1">UPNL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {POSITIONS.map((p) => (
-                <tr key={p.sym} className="border-b border-edge-crimson/10">
-                  <td className="px-2 py-[2px] text-edge-text">{p.sym}</td>
-                  <td
-                    className={
-                      "px-2 py-[2px] text-right " +
-                      (p.qty >= 0 ? "text-edge-text" : "text-edge-salmon")
-                    }
-                  >
-                    {p.qty.toLocaleString()}
-                  </td>
-                  <td className="px-2 py-[2px] text-right text-edge-dim">
-                    {p.avg}
-                  </td>
-                  <td className="px-2 py-[2px] text-right text-edge-text">
-                    {p.last}
-                  </td>
-                  <td
-                    className={
-                      "px-2 py-[2px] text-right " +
-                      (p.pnl >= 0 ? "text-edge-green" : "text-edge-salmon")
-                    }
-                  >
-                    {p.pnl >= 0 ? "+" : ""}
-                    {p.pnl.toLocaleString()}
-                  </td>
+          {summary.positions.length === 0 ? (
+            <div className="p-2 text-edge-dim text-xxs">
+              No open positions — flat book.
+            </div>
+          ) : (
+            <table className="w-full tabular">
+              <thead>
+                <tr className="text-xxs text-edge-dim">
+                  <th className="text-left px-2 py-1">SYM</th>
+                  <th className="text-right px-2 py-1">QTY</th>
+                  <th className="text-right px-2 py-1">AVG</th>
+                  <th className="text-right px-2 py-1">UPNL</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {summary.positions.map((p) => (
+                  <tr
+                    key={p.symbol}
+                    className="border-b border-edge-crimson/10"
+                  >
+                    <td className="px-2 py-[2px] text-edge-text">{p.symbol}</td>
+                    <td
+                      className={
+                        "px-2 py-[2px] text-right " +
+                        (p.quantity >= 0
+                          ? "text-edge-text"
+                          : "text-edge-salmon")
+                      }
+                    >
+                      {p.quantity.toLocaleString(undefined, {
+                        maximumFractionDigits: 6,
+                      })}
+                    </td>
+                    <td className="px-2 py-[2px] text-right text-edge-dim">
+                      {p.averageEntryPrice.toFixed(4)}
+                    </td>
+                    <td
+                      className={
+                        "px-2 py-[2px] text-right " +
+                        (p.unrealizedPnL >= 0
+                          ? "text-edge-green"
+                          : "text-edge-salmon")
+                      }
+                    >
+                      {fmtPnL(p.unrealizedPnL)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
 
         <div className="overflow-auto scrollbar border border-edge-crimson/20">
           <div className="text-xxs text-edge-crimson/80 px-2 py-1 border-b border-edge-crimson/30 uppercase">
-            Open / Recent Orders
+            Completed Trades · {fills.length}
+            {pending.length > 0 && (
+              <span className="text-edge-amber">
+                {" "}
+                · {pending.length} queued
+              </span>
+            )}
           </div>
           <table className="w-full tabular">
             <thead>
               <tr className="text-xxs text-edge-dim">
-                <th className="text-left px-2 py-1">ID</th>
+                <th className="text-left px-2 py-1">REF</th>
                 <th className="text-left px-2 py-1">SYM</th>
                 <th className="text-left px-2 py-1">SIDE</th>
                 <th className="text-right px-2 py-1">QTY</th>
-                <th className="text-left px-2 py-1">TYPE</th>
                 <th className="text-right px-2 py-1">PX</th>
+                <th className="text-right px-2 py-1">RPNL</th>
                 <th className="text-left px-2 py-1">STATUS</th>
               </tr>
             </thead>
             <tbody>
-              {ORDERS.map((o) => (
-                <tr key={o.id} className="border-b border-edge-crimson/10">
-                  <td className="px-2 py-[2px] text-edge-dim">{o.id}</td>
-                  <td className="px-2 py-[2px] text-edge-text">{o.sym}</td>
+              {pending.map((o) => (
+                <tr key={"p-" + o.id} className="border-b border-edge-crimson/10">
+                  <td className="px-2 py-[2px] text-edge-dim">{o.id.slice(0, 10)}</td>
+                  <td className="px-2 py-[2px] text-edge-text">{o.symbol}</td>
                   <td
                     className={
-                      "px-2 py-[2px] " +
-                      (o.side === "BUY" ? "text-edge-green" : "text-edge-salmon")
+                      "px-2 py-[2px] uppercase " +
+                      (o.side === "buy"
+                        ? "text-edge-green"
+                        : "text-edge-salmon")
                     }
                   >
                     {o.side}
                   </td>
-                  <td className="px-2 py-[2px] text-right">{o.qty}</td>
-                  <td className="px-2 py-[2px]">{o.type}</td>
+                  <td className="px-2 py-[2px] text-right">{o.quantity}</td>
                   <td className="px-2 py-[2px] text-right">
-                    {o.px ? o.px.toFixed(2) : "—"}
+                    {o.price.toFixed(4)}
+                  </td>
+                  <td className="px-2 py-[2px] text-right text-edge-dim">—</td>
+                  <td className="px-2 py-[2px] text-edge-amber">QUEUED</td>
+                </tr>
+              ))}
+              {fills.map((o) => (
+                <tr key={o.id} className="border-b border-edge-crimson/10">
+                  <td className="px-2 py-[2px] text-edge-dim">
+                    {o.orderReference || o.id.slice(0, 10)}
+                  </td>
+                  <td className="px-2 py-[2px] text-edge-text">{o.symbol}</td>
+                  <td
+                    className={
+                      "px-2 py-[2px] uppercase " +
+                      (o.side === "buy"
+                        ? "text-edge-green"
+                        : "text-edge-salmon")
+                    }
+                  >
+                    {o.side}
+                  </td>
+                  <td className="px-2 py-[2px] text-right">
+                    {o.quantity.toLocaleString(undefined, {
+                      maximumFractionDigits: 6,
+                    })}
+                  </td>
+                  <td className="px-2 py-[2px] text-right">
+                    {o.executionPrice.toFixed(4)}
                   </td>
                   <td
                     className={
-                      "px-2 py-[2px] " +
-                      (o.status === "FILLED"
+                      "px-2 py-[2px] text-right " +
+                      (o.realizedPnL == null
+                        ? "text-edge-dim"
+                        : o.realizedPnL >= 0
                         ? "text-edge-green"
-                        : o.status === "REJECTED"
-                        ? "text-edge-salmon"
-                        : "text-edge-amber")
+                        : "text-edge-salmon")
                     }
                   >
+                    {o.realizedPnL == null ? "—" : fmtPnL(o.realizedPnL)}
+                  </td>
+                  <td className="px-2 py-[2px] text-edge-green uppercase">
                     {o.status}
                   </td>
                 </tr>
               ))}
+              {fills.length === 0 && pending.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-2 py-3 text-edge-dim text-xxs text-center"
+                  >
+                    No fills yet — simulation is connected but empty.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

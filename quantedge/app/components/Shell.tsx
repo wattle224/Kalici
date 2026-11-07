@@ -5,12 +5,26 @@ import { TopBar } from "./TopBar";
 import { StatusBar } from "./StatusBar";
 import { BottomTicker } from "./BottomTicker";
 import { useAppStore } from "../store/useAppStore";
+import { useLedgerStore } from "../store/useLedgerStore";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const setLatency = useAppStore((s) => s.setLatency);
   const pushNotification = useAppStore((s) => s.pushNotification);
   const tickTicker = useAppStore((s) => s.tickTicker);
   const ticker = useAppStore((s) => s.ticker);
+  const refreshLedger = useLedgerStore((s) => s.refresh);
+  const ledgerConnected = useLedgerStore((s) => s.summary.connected);
+
+  // Poll the simulation ledger on :8000 so Trading / StatusBar / cube see live
+  // orders, fills and PnL. Faster when ONLINE so the strip stays fresh.
+  useEffect(() => {
+    refreshLedger();
+    const i = setInterval(
+      () => refreshLedger(),
+      ledgerConnected ? 5000 : 10000
+    );
+    return () => clearInterval(i);
+  }, [refreshLedger, ledgerConnected]);
 
   useEffect(() => {
     const i = setInterval(() => {
