@@ -71,10 +71,40 @@ if "%NEEDS_INSTALL%"=="1" (
   )
 )
 
+REM --- Port 8000: simulation ledger API (REQUIRED for orders / fills / PnL) ---
+if not exist "%ROOT%\backend\server.mjs" (
+  echo WARNING: backend\server.mjs not found — simulation ledger cannot start.
+) else (
+  powershell -NoProfile -Command "try { (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 2).StatusCode } catch { exit 1 }" >nul 2>&1
+  if errorlevel 1 (
+    echo Starting simulation ledger API on port 8000...
+    start "Kalici Ledger API :8000 - KEEP OPEN" /D "%ROOT%" cmd /k node backend\server.mjs
+  ) else (
+    echo Ledger API already running on port 8000.
+  )
+
+  set "LEDGER_OK=0"
+  for /L %%i in (1,1,20) do (
+    powershell -NoProfile -Command "try { (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 2).StatusCode } catch { exit 1 }" >nul 2>&1
+    if not errorlevel 1 (
+      set "LEDGER_OK=1"
+      goto :ledger_ready
+    )
+    timeout /t 1 /nobreak >nul
+  )
+  :ledger_ready
+  if "!LEDGER_OK!"=="0" (
+    echo WARNING: Ledger API did not answer on :8000 within 20s.
+    echo Check the "Kalici Ledger API :8000 - KEEP OPEN" window for errors.
+  ) else (
+    echo Ledger API OK: http://127.0.0.1:8000/health
+  )
+)
+
 netstat -ano | findstr ":3100" | findstr "LISTENING" >nul 2>&1
 if not errorlevel 1 (
   echo QUANTEDGE already running on port 3100.
-  start "" "http://127.0.0.1:3100/"
+  start "" "http://127.0.0.1:3100/trading"
   exit /b 0
 )
 
@@ -96,12 +126,14 @@ for /L %%i in (1,1,30) do (
 if "%UP%"=="0" (
   echo WARNING: Server did not respond within 30s. Check the KEEP OPEN window for errors.
 ) else (
-  echo QUANTEDGE is ready: http://127.0.0.1:3100/
-  start "" "http://127.0.0.1:3100/"
+  echo QUANTEDGE is ready: http://127.0.0.1:3100/trading
+  start "" "http://127.0.0.1:3100/trading"
 )
 
 echo.
-echo KEEP OPEN: the "QUANTEDGE :3100 - KEEP OPEN" window.
-echo Close it to stop the server.
+echo KEEP OPEN:
+echo   - "Kalici Ledger API :8000 - KEEP OPEN"  ^(orders / fills / PnL^)
+echo   - "QUANTEDGE :3100 - KEEP OPEN"          ^(the terminal UI^)
+echo Close either window to stop that service.
 echo.
 pause

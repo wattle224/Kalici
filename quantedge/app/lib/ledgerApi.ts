@@ -85,7 +85,13 @@ export type SimulationSummary = {
   fetchedAt: number | null;
 };
 
-const REMOTE_URLS = [
+/**
+ * Prefer same-origin /api/ledger (Next.js proxy → :8000, with file fallback).
+ * Direct :8000 URLs are a last resort — browsers often block them with
+ * "Failed to fetch" (CORS / Private Network Access) when the page is on :3100.
+ */
+const LEDGER_URLS = [
+  "/api/ledger",
   "http://127.0.0.1:8000/api/ledger",
   "http://127.0.0.1:8000/ledger",
   "http://127.0.0.1:8000/api/trading",
@@ -94,20 +100,34 @@ const REMOTE_URLS = [
 
 async function tryFetch(url: string): Promise<LedgerPayload> {
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const err = (await res.json()) as { error?: string };
+      if (err?.error) detail = err.error;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
   return (await res.json()) as LedgerPayload;
 }
 
 export async function fetchLedger(): Promise<LedgerPayload> {
   let last: Error | null = null;
-  for (const url of REMOTE_URLS) {
+  for (const url of LEDGER_URLS) {
     try {
       return await tryFetch(url);
     } catch (e) {
       last = e instanceof Error ? e : new Error("fetch failed");
     }
   }
-  throw last ?? new Error("Ledger API unreachable on :8000");
+  throw (
+    last ??
+    new Error(
+      "Ledger unreachable. Start it with Launch-QuantEdge.bat (starts :8000) or Launch-Investment-Management.bat."
+    )
+  );
 }
 
 export function summariseLedger(payload: LedgerPayload): SimulationSummary {
