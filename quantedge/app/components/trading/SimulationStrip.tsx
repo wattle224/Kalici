@@ -42,6 +42,17 @@ export function SimulationStrip() {
   const refresh = useLedgerStore((s) => s.refresh);
   const fundDeposit = useLedgerStore((s) => s.fundDeposit);
   const [amount, setAmount] = useState("1000");
+  const [fundHint, setFundHint] = useState<string | null>(null);
+
+  const applyFund = async () => {
+    const n = Number(amount);
+    if (!Number.isFinite(n) || n < 10) {
+      setFundHint("Minimum deposit is £10 — try 100, 500 or 1000.");
+      return;
+    }
+    setFundHint(null);
+    await fundDeposit(n);
+  };
 
   if (!summary.connected) {
     return (
@@ -149,16 +160,35 @@ export function SimulationStrip() {
         <input
           type="number"
           min={10}
-          step={50}
+          step={10}
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          onChange={(e) => {
+            setAmount(e.target.value);
+            setFundHint(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void applyFund();
+          }}
           className="w-24 bg-bg-1 border border-edge-crimson/50 px-2 py-[2px] text-edge-text tabular focus:outline-none focus:border-edge-pale"
         />
+        {[100, 500, 1000, 5000].map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            onClick={() => {
+              setAmount(String(preset));
+              setFundHint(null);
+              void fundDeposit(preset);
+            }}
+            disabled={loading}
+            className="border border-edge-crimson/40 text-edge-dim px-2 py-[2px] hover:text-edge-pale hover:border-edge-crimson disabled:opacity-50"
+          >
+            £{preset}
+          </button>
+        ))}
         <button
-          onClick={() => {
-            const n = Number(amount);
-            if (Number.isFinite(n) && n >= 10) fundDeposit(n);
-          }}
+          type="button"
+          onClick={() => void applyFund()}
           disabled={loading}
           className="border border-edge-crimson text-edge-pale px-3 py-[2px] hover:bg-edge-crimson/20 uppercase disabled:opacity-50"
           title="Sets deposit, resets trades, starts the model from cash"
@@ -166,11 +196,12 @@ export function SimulationStrip() {
           {loading ? "Funding…" : "Set Deposit & Restart Model"}
         </button>
         <span className="text-edge-dim">
-          Resets positions/trades and funds cash = deposit. Model then buys/sells
-          only when it sees an opportunity.
+          Min £10. Resets positions/trades and funds cash = deposit.
         </span>
-        {summary.error && (
-          <span className="text-edge-salmon w-full">{summary.error}</span>
+        {(fundHint || summary.error) && (
+          <span className="text-edge-salmon w-full">
+            {fundHint || summary.error}
+          </span>
         )}
       </div>
 

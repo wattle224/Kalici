@@ -132,25 +132,42 @@ async function tryFetch(
   url: string,
   init?: RequestInit
 ): Promise<LedgerPayload> {
-  const res = await fetch(url, { cache: "no-store", ...init });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+      ...init,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "fetch failed";
+    if (/abort|timeout/i.test(msg)) {
+      throw new Error(`Ledger timeout talking to ${url}`);
+    }
+    throw new Error(
+      `Cannot reach ${url} (${msg}). Keep the Kalici Ledger window open.`
+    );
+  }
   const ctype = res.headers.get("content-type") ?? "";
   const text = await res.text();
 
   // Next.js / proxy crashes often return HTML 500 pages — treat as hard fail
-  // so we fall through to the direct :8000 ledger URL.
+  // so we fall through to the next URL.
   if (
     ctype.includes("text/html") ||
     text.trimStart().startsWith("<!DOCTYPE") ||
     text.trimStart().startsWith("<html")
   ) {
     throw new Error(
-      `Proxy returned HTML (${res.status}) — trying direct ledger`
+      `Proxy returned HTML (${res.status}) — trying next ledger URL`
     );
   }
 
-  let data: LedgerPayload & { error?: string } = {};
+  let data: LedgerPayload & { error?: string; hint?: string } = {};
   try {
-    data = text ? (JSON.parse(text) as LedgerPayload & { error?: string }) : {};
+    data = text
+      ? (JSON.parse(text) as LedgerPayload & { error?: string; hint?: string })
+      : {};
   } catch {
     throw new Error(
       `Non-JSON ledger response (${res.status}): ${text.slice(0, 120)}`
@@ -158,7 +175,13 @@ async function tryFetch(
   }
 
   if (!res.ok) {
-    throw new Error(data.error ?? `HTTP ${res.status}`);
+    const detail = data.error ?? data.hint ?? `HTTP ${res.status}`;
+    if (/unknown action/i.test(detail)) {
+      throw new Error(
+        "Ledger build is outdated (no set-deposit). Close the ledger window and re-run Launch-QuantEdge.bat."
+      );
+    }
+    throw new Error(detail);
   }
   return data;
 }
@@ -181,27 +204,36 @@ export async function fetchLedger(): Promise<LedgerPayload> {
   );
 }
 
-/** Prefer direct :8000 — funding must reach the live ledger, not a stale proxy. */
+/**
+ * Same-origin proxy first (avoids Chrome Private Network Access / CORS issues
+ * talking to :8000 from the browser). Direct :8000 is the fallback.
+ */
 const FUND_URLS = [
+  "/api/ledger",
   "http://127.0.0.1:8000/api/ledger",
   "http://127.0.0.1:8000/api/trading",
   "http://localhost:8000/api/ledger",
-  "/api/ledger",
 ];
 
 export async function setDeposit(amount: number): Promise<LedgerPayload> {
   if (!Number.isFinite(amount) || amount < 10) {
-    throw new Error("Deposit must be a number ≥ 10");
+    throw new Error("Deposit must be at least £10 (you entered £" + amount + ")");
   }
   const body = JSON.stringify({ action: "set-deposit", amount });
   let last: Error | null = null;
   for (const url of FUND_URLS) {
     try {
-      return await tryFetch(url, {
+      const payload = await tryFetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body,
       });
+      const deposit =
+        payload.deposit ?? payload.capital?.deposit ?? payload.snapshot?.capital?.deposit;
+      if (typeof deposit === "number" && deposit >= 10) {
+        return payload;
+      }
+      last = new Error("Fund response missing deposit — trying next URL");
     } catch (e) {
       last = e instanceof Error ? e : new Error("fetch failed");
     }
@@ -209,7 +241,7 @@ export async function setDeposit(amount: number): Promise<LedgerPayload> {
   throw (
     last ??
     new Error(
-      "Could not set deposit — start Launch-QuantEdge.bat and keep the ledger window open."
+      "Could not set deposit — close old windows and re-run Launch-QuantEdge.bat."
     )
   );
 }

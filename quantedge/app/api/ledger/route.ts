@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
-import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -10,6 +15,16 @@ const UPSTREAMS = [
   "http://127.0.0.1:8000/ledger",
   "http://127.0.0.1:8000/api/trading",
 ];
+
+const SCHEMA_VERSION = 9;
+const DEFAULT_MARK = 1.1611;
+
+function ledgerPaths(): string[] {
+  return [
+    join(process.cwd(), "..", "backend", "data", "ledger.json"),
+    join(process.cwd(), "backend", "data", "ledger.json"),
+  ];
+}
 
 async function fetchUpstream(
   init?: RequestInit
@@ -21,7 +36,6 @@ async function fetchUpstream(
         signal: AbortSignal.timeout(5000),
         ...init,
       });
-      // Accept any JSON response (incl. 400 validation errors) from a live ledger.
       const ctype = res.headers.get("content-type") ?? "";
       if (ctype.includes("application/json") || res.ok) {
         return { res, url };
@@ -56,80 +70,143 @@ function settledFills(trades: unknown[]) {
     );
 }
 
+function payloadFromSnapshot(
+  snapshot: {
+    trades?: unknown[];
+    openPositions?: {
+      unrealizedPnL?: number;
+      quantity: number;
+      averageEntryPrice: number;
+      symbol: string;
+    }[];
+    pendingAutomations?: unknown[];
+    executionState?: string;
+    capital?: {
+      deposit: number;
+      cash: number;
+      markPrice: number;
+      decisions?: unknown[];
+    };
+  },
+  source: string,
+  note?: string
+) {
+  const history = settledFills(snapshot.trades ?? []);
+  const realized =
+    (snapshot.trades as { realizedPnL?: number | null }[] | undefined)?.reduce(
+      (s, t) => s + (t.realizedPnL ?? 0),
+      0
+    ) ?? 0;
+  const capital = snapshot.capital;
+  const mark = capital?.markPrice ?? DEFAULT_MARK;
+  const cash = capital?.cash ?? 0;
+  const deposit = capital?.deposit ?? 0;
+  const positions = snapshot.openPositions ?? [];
+  const equity =
+    cash +
+    positions.reduce(
+      (s, p) =>
+        s +
+        p.quantity *
+          (p.symbol?.startsWith("XRP") ? mark : p.averageEntryPrice),
+      0
+    );
+  const unrealized = positions.reduce(
+    (s, p) => s + (p.unrealizedPnL ?? 0),
+    0
+  );
+  return {
+    ok: true,
+    source,
+    snapshot,
+    execution: {
+      label: snapshot.executionState === "running" ? "ONLINE" : "OFFLINE",
+      state: snapshot.executionState,
+      isOnline: snapshot.executionState === "running",
+    },
+    executionState: snapshot.executionState,
+    openPositions: positions,
+    tradeHistory: history,
+    orders: history,
+    pendingAutomations: snapshot.pendingAutomations ?? [],
+    totalRealizedPnL: realized,
+    realisedPnL: realized,
+    unrealizedPnL: unrealized,
+    capital,
+    deposit,
+    cash,
+    equity,
+    returnPct: deposit
+      ? Math.round(((equity - deposit) / deposit) * 10000) / 100
+      : 0,
+    markPrice: mark,
+    lastDecision: capital?.decisions?.[0] ?? null,
+    decisions: capital?.decisions ?? [],
+    ...(note ? { note } : {}),
+  };
+}
+
 function readLedgerFile() {
-  const candidates = [
-    join(process.cwd(), "..", "backend", "data", "ledger.json"),
-    join(process.cwd(), "backend", "data", "ledger.json"),
-  ];
-  for (const path of candidates) {
+  for (const path of ledgerPaths()) {
     if (!existsSync(path)) continue;
     try {
-      const snapshot = JSON.parse(readFileSync(path, "utf8")) as {
-        trades?: unknown[];
-        openPositions?: { unrealizedPnL?: number; quantity: number; averageEntryPrice: number; symbol: string }[];
-        pendingAutomations?: unknown[];
-        executionState?: string;
-        capital?: {
-          deposit: number;
-          cash: number;
-          markPrice: number;
-          decisions?: unknown[];
-        };
-      };
-      const history = settledFills(snapshot.trades ?? []);
-      const realized = (
-        snapshot.trades as { realizedPnL?: number | null }[] | undefined
-      )?.reduce((s, t) => s + (t.realizedPnL ?? 0), 0) ?? 0;
-      const capital = snapshot.capital;
-      const mark = capital?.markPrice ?? 1.1611;
-      const cash = capital?.cash ?? 0;
-      const deposit = capital?.deposit ?? 0;
-      const positions = snapshot.openPositions ?? [];
-      const equity =
-        cash +
-        positions.reduce(
-          (s, p) =>
-            s +
-            p.quantity *
-              (p.symbol?.startsWith("XRP") ? mark : p.averageEntryPrice),
-          0
-        );
-      const unrealized = positions.reduce(
-        (s, p) => s + (p.unrealizedPnL ?? 0),
-        0
-      );
-      return {
-        ok: true,
-        source: "file",
+      const snapshot = JSON.parse(readFileSync(path, "utf8"));
+      return payloadFromSnapshot(
         snapshot,
-        execution: {
-          label:
-            snapshot.executionState === "running" ? "ONLINE" : "OFFLINE",
-          state: snapshot.executionState,
-          isOnline: snapshot.executionState === "running",
-        },
-        executionState: snapshot.executionState,
-        openPositions: positions,
-        tradeHistory: history,
-        orders: history,
-        pendingAutomations: snapshot.pendingAutomations ?? [],
-        totalRealizedPnL: realized,
-        realisedPnL: realized,
-        unrealizedPnL: unrealized,
-        capital,
-        deposit,
-        cash,
-        equity,
-        returnPct: deposit
-          ? Math.round(((equity - deposit) / deposit) * 10000) / 100
-          : 0,
-        markPrice: mark,
-        lastDecision: capital?.decisions?.[0] ?? null,
-        decisions: capital?.decisions ?? [],
-        note: "Served from backend/data/ledger.json — start the ledger API on :8000 for live model ticks.",
-      };
+        "file",
+        "Served from backend/data/ledger.json — start the ledger API on :8000 for live model ticks."
+      );
     } catch {
       /* try next */
+    }
+  }
+  return null;
+}
+
+function fundedSnapshot(amount: number) {
+  const deposit = Math.round(Math.max(10, amount) * 100) / 100;
+  const at = new Date().toISOString();
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    executionState: "running" as const,
+    openPositions: [],
+    trades: [],
+    pendingAutomations: [],
+    capital: {
+      deposit,
+      cash: deposit,
+      currency: "GBP",
+      markPrice: DEFAULT_MARK,
+      lastDecisionAt: at,
+      decisions: [
+        {
+          id: `fund-${Date.now()}`,
+          at,
+          action: "HOLD" as const,
+          symbol: "XRP-USD",
+          reason: `Account funded with £${deposit.toFixed(2)}. Model waiting for opportunity.`,
+          score: 0,
+          cashAfter: deposit,
+        },
+      ],
+    },
+  };
+}
+
+/** Persist deposit even when :8000 is down or running an outdated build. */
+function writeDepositToFile(amount: number) {
+  const snapshot = fundedSnapshot(amount);
+  for (const path of ledgerPaths()) {
+    try {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, JSON.stringify(snapshot, null, 2));
+      return payloadFromSnapshot(
+        snapshot,
+        "file-fund",
+        "Deposit saved to ledger.json. If the model does not tick, close any old ledger window and re-run Launch-QuantEdge.bat."
+      );
+    } catch {
+      /* try next path */
     }
   }
   return null;
@@ -140,6 +217,22 @@ export async function GET() {
     const upstream = await fetchUpstream();
     if (upstream) {
       const body = await upstream.res.json();
+      // Prefer live API when it understands the capital account.
+      if (
+        upstream.res.ok &&
+        (typeof body?.deposit === "number" ||
+          typeof body?.capital?.deposit === "number")
+      ) {
+        return NextResponse.json(
+          { ...body, source: "api:8000" },
+          { status: 200 }
+        );
+      }
+      // Live server is outdated / missing capital — prefer on-disk funded account.
+      const file = readLedgerFile();
+      if (file && typeof file.deposit === "number" && file.deposit >= 10) {
+        return NextResponse.json(file);
+      }
       return NextResponse.json(
         { ...body, source: "api:8000" },
         { status: upstream.res.status }
@@ -173,24 +266,98 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.text();
+    const raw = await request.text();
+    let parsed: {
+      action?: string;
+      amount?: number;
+      deposit?: number;
+    } = {};
+    try {
+      parsed = raw ? JSON.parse(raw) : {};
+    } catch {
+      return NextResponse.json(
+        { ok: false, error: "Invalid JSON" },
+        { status: 400 }
+      );
+    }
+
+    const isFund =
+      parsed.action === "set-deposit" || parsed.action === "clean-restart";
+    const amount = Number(parsed.amount ?? parsed.deposit);
+
+    if (parsed.action === "set-deposit") {
+      if (!Number.isFinite(amount) || amount < 10) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "Deposit must be at least £10 (e.g. 100, 500, 1000).",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const upstream = await fetchUpstream({
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body,
+      body: raw,
     });
+
     if (upstream) {
-      const data = await upstream.res.json();
-      return NextResponse.json(
-        { ...data, source: "api:8000" },
-        { status: upstream.res.status }
-      );
+      const data = (await upstream.res.json()) as {
+        ok?: boolean;
+        deposit?: number;
+        capital?: { deposit?: number };
+        error?: string;
+        hint?: string;
+      };
+      const funded =
+        upstream.res.ok &&
+        (typeof data.deposit === "number" ||
+          typeof data.capital?.deposit === "number");
+      if (funded) {
+        return NextResponse.json(
+          { ...data, source: "api:8000" },
+          { status: 200 }
+        );
+      }
+
+      // Outdated ledger build (no set-deposit) or validation error from :8000.
+      const outdated =
+        /unknown action/i.test(data.error ?? "") ||
+        /unknown action/i.test(data.hint ?? "");
+      if (isFund && Number.isFinite(amount) && amount >= 10 && outdated) {
+        const file = writeDepositToFile(amount);
+        if (file) {
+          return NextResponse.json({
+            ...file,
+            warning:
+              "Ledger on :8000 is outdated. Deposit was saved to disk — re-run Launch-QuantEdge.bat so the model picks it up.",
+          });
+        }
+      }
+
+      if (!isFund || !Number.isFinite(amount) || amount < 10) {
+        return NextResponse.json(
+          { ...data, source: "api:8000" },
+          { status: upstream.res.status }
+        );
+      }
+      // Fall through to file fund for set-deposit when upstream rejected oddly.
     }
+
+    if (isFund && Number.isFinite(amount) && amount >= 10) {
+      const file = writeDepositToFile(amount);
+      if (file) {
+        return NextResponse.json(file);
+      }
+    }
+
     return NextResponse.json(
       {
         ok: false,
         error:
-          "Cannot set deposit — ledger API on :8000 is not running. Start Launch-QuantEdge.bat (keep the ledger window open).",
+          "Cannot set deposit — ledger API on :8000 is not running and file write failed. Re-run Launch-QuantEdge.bat.",
       },
       { status: 503 }
     );

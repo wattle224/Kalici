@@ -75,17 +75,17 @@ REM --- Port 8000: simulation ledger API (REQUIRED for orders / fills / PnL) ---
 if not exist "%ROOT%\backend\server.ts" if not exist "%ROOT%\backend\server.mjs" (
   echo WARNING: backend\server.ts / server.mjs not found — simulation ledger cannot start.
 ) else (
-  powershell -NoProfile -Command "try { (Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8000/health' -TimeoutSec 2).StatusCode } catch { exit 1 }" >nul 2>&1
-  if errorlevel 1 (
-    echo Starting deposit-based simulation ledger on port 8000...
-    REM Prefer TypeScript server; fall back to pure Node server.mjs (no tsx).
-    if exist "%ROOT%\backend\server.ts" (
-      start "Kalici Ledger API :8000 - KEEP OPEN" /D "%ROOT%" cmd /k "npx tsx backend/server.ts || (echo. & echo tsx failed — falling back to node backend/server.mjs & node backend/server.mjs)"
-    ) else (
-      start "Kalici Ledger API :8000 - KEEP OPEN" /D "%ROOT%" cmd /k node backend/server.mjs
-    )
+  REM Always recycle :8000 so an outdated ledger (no set-deposit) cannot block funding.
+  echo Ensuring a fresh deposit-capable ledger on port 8000...
+  powershell -NoProfile -Command ^
+    "$conns = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue; ^
+     foreach ($c in $conns) { try { Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue } catch {} }" >nul 2>&1
+  timeout /t 1 /nobreak >nul
+
+  if exist "%ROOT%\backend\server.ts" (
+    start "Kalici Ledger API :8000 - KEEP OPEN" /D "%ROOT%" cmd /k "npx tsx backend/server.ts || (echo. & echo tsx failed — falling back to node backend/server.mjs & node backend/server.mjs)"
   ) else (
-    echo Ledger API already running on port 8000.
+    start "Kalici Ledger API :8000 - KEEP OPEN" /D "%ROOT%" cmd /k node backend/server.mjs
   )
 
   set "LEDGER_OK=0"
