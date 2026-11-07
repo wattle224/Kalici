@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useLedgerStore } from "../../store/useLedgerStore";
-import { fmtGBP, fmtPnL } from "../../lib/ledgerApi";
+import { fmtGBP, fmtPnL, startLedger } from "../../lib/ledgerApi";
 
 function Cell({
   label,
@@ -62,23 +62,41 @@ export function SimulationStrip() {
             ● Ledger Offline
           </span>
         </div>
-        <div className="flex-1 px-3 py-2 text-xs text-edge-dim flex items-center justify-between gap-3">
+        <div className="flex-1 px-3 py-2 text-xs text-edge-dim flex items-center justify-between gap-3 flex-wrap">
           <span>
-            Simulation ledger not reachable. Close QUANTEDGE and re-run{" "}
-            <span className="text-edge-pale">Launch-QuantEdge.bat</span> — it
-            starts the deposit-based model on{" "}
-            <span className="text-edge-pale">:8000</span>. Keep the ledger
-            window open, then click Refresh.
+            Ledger on <span className="text-edge-pale">:8000</span> is not
+            running. Click <span className="text-edge-pale">Start Ledger</span>{" "}
+            below, or double-click{" "}
+            <span className="text-edge-pale">Start-Ledger.bat</span> /{" "}
+            <span className="text-edge-pale">Update-And-Launch-QuantEdge.bat</span>{" "}
+            and keep that window open.
             {summary.error && (
               <span className="text-edge-salmon"> · {summary.error}</span>
             )}
           </span>
-          <button
-            onClick={() => refresh()}
-            className="border border-edge-crimson/50 text-edge-pale text-xxs px-3 py-[3px] hover:bg-edge-crimson/15 whitespace-nowrap"
-          >
-            {loading ? "…" : "REFRESH"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={async () => {
+                setFundHint("Starting ledger…");
+                const ok = await startLedger();
+                setFundHint(
+                  ok
+                    ? null
+                    : "Could not auto-start — run Start-Ledger.bat"
+                );
+                await refresh();
+              }}
+              className="border border-edge-crimson text-edge-pale text-xxs px-3 py-[3px] hover:bg-edge-crimson/15 whitespace-nowrap"
+            >
+              START LEDGER
+            </button>
+            <button
+              onClick={() => refresh()}
+              className="border border-edge-crimson/50 text-edge-pale text-xxs px-3 py-[3px] hover:bg-edge-crimson/15 whitespace-nowrap"
+            >
+              {loading ? "…" : "REFRESH"}
+            </button>
+          </div>
         </div>
       </div>
     );

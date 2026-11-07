@@ -9,6 +9,7 @@ $RepoPath   = $RepoPath.TrimEnd('\')
 $Launcher   = Join-Path $RepoPath "Launch-Investment-Management.bat"
 $QELauncher = Join-Path $RepoPath "Launch-QuantEdge.bat"
 $QEUpdate   = Join-Path $RepoPath "Update-And-Launch-QuantEdge.bat"
+$QELedger   = Join-Path $RepoPath "Start-Ledger.bat"
 
 if (-not (Test-Path -LiteralPath $Launcher)) {
     Write-Error "Launcher not found: $Launcher"
@@ -28,7 +29,8 @@ $oldNames = @(
     "Kalici Investment Management.lnk",
     "QUANTEDGE Terminal.lnk",
     "QUANTEDGE.lnk",
-    "QUANTEDGE Terminal (Update).lnk"
+    "QUANTEDGE Terminal (Update).lnk",
+    "QUANTEDGE Ledger.lnk"
 )
 
 foreach ($name in $oldNames) {
@@ -93,6 +95,18 @@ if (Test-Path -LiteralPath $QEUpdate) {
     $lnk4.IconLocation = "$env:SystemRoot\System32\shell32.dll,146"
     $lnk4.Save()
     Write-Host "Created: QUANTEDGE Terminal (Update).lnk"
+}
+
+# --- QUANTEDGE Ledger only (:8000) — use when funding says ledger is not running ---
+if (Test-Path -LiteralPath $QELedger) {
+    $lnk5Path = Join-Path $Desktop "QUANTEDGE Ledger.lnk"
+    $lnk5 = $shell.CreateShortcut($lnk5Path)
+    $lnk5.TargetPath = $QELedger
+    $lnk5.WorkingDirectory = $RepoPath
+    $lnk5.Description = "Start Kalici deposit ledger on :8000 (keep window open)"
+    $lnk5.IconLocation = "$env:SystemRoot\System32\shell32.dll,167"
+    $lnk5.Save()
+    Write-Host "Created: QUANTEDGE Ledger.lnk"
 }
 
 Write-Host ""

@@ -215,33 +215,66 @@ const FUND_URLS = [
   "http://localhost:8000/api/ledger",
 ];
 
+export async function startLedger(): Promise<boolean> {
+  try {
+    const res = await fetch("/api/ledger", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "start-ledger" }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(20000),
+    });
+    const data = (await res.json()) as { ok?: boolean };
+    return res.ok && data.ok === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function setDeposit(amount: number): Promise<LedgerPayload> {
   if (!Number.isFinite(amount) || amount < 10) {
     throw new Error("Deposit must be at least £10 (you entered £" + amount + ")");
   }
   const body = JSON.stringify({ action: "set-deposit", amount });
   let last: Error | null = null;
-  for (const url of FUND_URLS) {
-    try {
-      const payload = await tryFetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-      });
-      const deposit =
-        payload.deposit ?? payload.capital?.deposit ?? payload.snapshot?.capital?.deposit;
-      if (typeof deposit === "number" && deposit >= 10) {
-        return payload;
+
+  const attempt = async () => {
+    for (const url of FUND_URLS) {
+      try {
+        const payload = await tryFetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        });
+        const deposit =
+          payload.deposit ??
+          payload.capital?.deposit ??
+          payload.snapshot?.capital?.deposit;
+        if (typeof deposit === "number" && deposit >= 10) {
+          return payload;
+        }
+        last = new Error("Fund response missing deposit — trying next URL");
+      } catch (e) {
+        last = e instanceof Error ? e : new Error("fetch failed");
       }
-      last = new Error("Fund response missing deposit — trying next URL");
-    } catch (e) {
-      last = e instanceof Error ? e : new Error("fetch failed");
     }
+    return null;
+  };
+
+  let payload = await attempt();
+  if (payload) return payload;
+
+  // Self-heal: ask the Next proxy to spawn backend/server.mjs, then retry once.
+  const started = await startLedger();
+  if (started) {
+    payload = await attempt();
+    if (payload) return payload;
   }
+
   throw (
     last ??
     new Error(
-      "Could not set deposit — close old windows and re-run Launch-QuantEdge.bat."
+      "Could not set deposit — double-click Start-Ledger.bat and keep that window open, then try again."
     )
   );
 }

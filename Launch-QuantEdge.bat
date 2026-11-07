@@ -107,11 +107,14 @@ if not exist "%ROOT%\backend\server.ts" if not exist "%ROOT%\backend\server.mjs"
   )
 )
 
+REM Recycle the UI too so funding/proxy fixes from git pull actually load.
 netstat -ano | findstr ":3100" | findstr "LISTENING" >nul 2>&1
 if not errorlevel 1 (
-  echo QUANTEDGE already running on port 3100.
-  start "" "http://127.0.0.1:3100/trading"
-  exit /b 0
+  echo Restarting QUANTEDGE on port 3100 so the latest code is loaded...
+  powershell -NoProfile -Command ^
+    "$conns = Get-NetTCPConnection -LocalPort 3100 -State Listen -ErrorAction SilentlyContinue; ^
+     foreach ($c in $conns) { try { Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue } catch {} }" >nul 2>&1
+  timeout /t 2 /nobreak >nul
 )
 
 echo Starting QUANTEDGE dev server on port 3100...
