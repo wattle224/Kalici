@@ -335,7 +335,8 @@ function CubeScene({
     <>
       <ambientLight intensity={0.7} />
       <FloatingParticles />
-      <group ref={group} scale={1.05}>
+      {/* 40% of the previous visual size (reduced by 60%), still centred at origin. */}
+      <group ref={group} scale={0.42}>
         <Wireframe />
         {faces.map((f, i) => (
           <FaceContent
