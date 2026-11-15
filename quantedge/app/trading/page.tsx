@@ -4,15 +4,12 @@ import { useEffect } from "react";
 import { Panel } from "../components/Panel";
 import { InstrumentSearch } from "../components/trading/InstrumentSearch";
 import { CandlestickChart } from "../components/trading/CandlestickChart";
-import { OrderBook } from "../components/trading/OrderBook";
 import { ModelFills } from "../components/trading/ModelFills";
-import { PortfolioPanel } from "../components/trading/PortfolioPanel";
-import { AIAnalyst } from "../components/trading/AIAnalyst";
+import { BlotterDock } from "../components/trading/BlotterDock";
 import { TechIndicators } from "../components/trading/TechIndicators";
 import { SimulationStrip } from "../components/trading/SimulationStrip";
 import { useAppStore } from "../store/useAppStore";
 import { useLedgerStore } from "../store/useLedgerStore";
-import { fmtPnL } from "../lib/ledgerApi";
 
 export default function TradingWorkspace() {
   const setWorkspace = useAppStore((s) => s.setWorkspace);
@@ -54,8 +51,12 @@ export default function TradingWorkspace() {
         <InstrumentSearch />
       </div>
 
+      {/*
+        Chart + right rail on top.
+        Bottom dock tabs: Blotter | Order Book | AI Research (only one visible).
+      */}
       <div className="flex-1 min-h-0 grid grid-cols-12 grid-rows-6 gap-2">
-        <div className="col-start-1 col-span-7 row-start-1 row-span-4 min-h-0">
+        <div className="col-start-1 col-span-9 row-start-1 row-span-4 min-h-0">
           <Panel
             title={`Chart · ${instr.symbol} · 1m · ${instr.venue}`}
             code="TRD-CHT"
@@ -66,19 +67,8 @@ export default function TradingWorkspace() {
           </Panel>
         </div>
 
-        <div className="col-start-8 col-span-2 row-start-1 row-span-6 min-h-0">
-          <Panel
-            title="Order Book · L2"
-            code="TRD-OB"
-            right="10 lvls"
-            className="h-full"
-          >
-            <OrderBook symbol={instr.symbol} last={instr.last} />
-          </Panel>
-        </div>
-
-        <div className="col-start-10 col-span-3 row-start-1 row-span-6 min-h-0 flex flex-col gap-2">
-          <Panel title="Technicals" code="TRD-TA" className="flex-1">
+        <div className="col-start-10 col-span-3 row-start-1 row-span-4 min-h-0 flex flex-col gap-2">
+          <Panel title="Technicals" code="TRD-TA" className="flex-1 min-h-0">
             <TechIndicators symbol={instr.symbol} />
           </Panel>
           <Panel
@@ -89,36 +79,14 @@ export default function TradingWorkspace() {
             }
             code="TRD-FILL"
             right={sim.connected ? "live ledger" : "offline"}
-            className="flex-1"
+            className="flex-1 min-h-0"
           >
             <ModelFills />
           </Panel>
         </div>
 
-        <div className="col-start-1 col-span-5 row-start-5 row-span-2 min-h-0">
-          <Panel
-            title={
-              sim.connected
-                ? `Bought & Sold · ${sim.buys}B / ${sim.sells}S · RPNL ${fmtPnL(sim.realizedPnL)}`
-                : "Bought & Sold · Positions"
-            }
-            code="TRD-PRT"
-            right={sim.connected ? sim.executionLabel : "ledger offline"}
-            className="h-full"
-          >
-            <PortfolioPanel />
-          </Panel>
-        </div>
-
-        <div className="col-start-6 col-span-2 row-start-5 row-span-2 min-h-0">
-          <Panel
-            title="AI Research · Analyst"
-            code="TRD-AI"
-            right="evidence-cited"
-            className="h-full"
-          >
-            <AIAnalyst />
-          </Panel>
+        <div className="col-start-1 col-span-12 row-start-5 row-span-2 min-h-0">
+          <BlotterDock />
         </div>
       </div>
     </div>

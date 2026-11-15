@@ -2,7 +2,7 @@
 
 import { useAppStore } from "../store/useAppStore";
 import { useLedgerStore } from "../store/useLedgerStore";
-import { fmtGBP, fmtPnL } from "../lib/ledgerApi";
+import { fmtPnL } from "../lib/ledgerApi";
 
 export function StatusBar() {
   const workspace = useAppStore((s) => s.workspace);
@@ -13,12 +13,6 @@ export function StatusBar() {
   const sim = useLedgerStore((s) => s.summary);
 
   const online = sim.connected && sim.executionLabel === "ONLINE";
-  const retTone =
-    sim.returnPct > 0
-      ? "text-edge-green"
-      : sim.returnPct < 0
-      ? "text-edge-salmon"
-      : "text-edge-text";
 
   return (
     <div className="absolute inset-x-0 bottom-[32px] h-[38px] z-20 border-t border-edge-crimson/40 bg-bg-1/90 flex items-center text-xxs">
@@ -33,32 +27,7 @@ export function StatusBar() {
             <span className="text-edge-salmon">● OFFLINE</span>
           )}
         </span>
-        <span className="text-edge-dim">
-          DEPOSIT{" "}
-          <span className="text-edge-text">
-            {sim.connected ? fmtGBP(sim.deposit) : "—"}
-          </span>
-        </span>
-        <span className="text-edge-dim">
-          CASH{" "}
-          <span className="text-edge-text">
-            {sim.connected ? fmtGBP(sim.cash) : "—"}
-          </span>
-        </span>
-        <span className="text-edge-dim">
-          EQUITY{" "}
-          <span className="text-edge-pale">
-            {sim.connected ? fmtGBP(sim.equity) : "—"}
-          </span>
-        </span>
-        <span className="text-edge-dim">
-          RET{" "}
-          <span className={sim.connected ? retTone : "text-edge-dim"}>
-            {sim.connected
-              ? `${sim.returnPct >= 0 ? "+" : ""}${sim.returnPct.toFixed(2)}%`
-              : "—"}
-          </span>
-        </span>
+        {/* Deposit / Cash / Equity / Return live only in the top SimulationStrip */}
         <span className="text-edge-dim">
           FILLS{" "}
           <span className="text-edge-green">
