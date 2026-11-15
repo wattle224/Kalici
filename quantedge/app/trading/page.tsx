@@ -55,7 +55,7 @@ export default function TradingWorkspace() {
       </div>
 
       <div className="flex-1 min-h-0 grid grid-cols-12 grid-rows-6 gap-2">
-        <div className="col-start-1 col-span-7 row-start-1 row-span-4 min-h-0">
+        <div className="col-start-1 col-span-5 row-start-1 row-span-4 min-h-0">
           <Panel
             title={`Chart · ${instr.symbol} · 1m · ${instr.venue}`}
             code="TRD-CHT"
@@ -66,7 +66,8 @@ export default function TradingWorkspace() {
           </Panel>
         </div>
 
-        <div className="col-start-8 col-span-2 row-start-1 row-span-6 min-h-0">
+        {/* Order Book | AI Research — side by side, shared stage */}
+        <div className="col-start-6 col-span-2 row-start-1 row-span-6 min-h-0">
           <Panel
             title="Order Book · L2"
             code="TRD-OB"
@@ -77,8 +78,19 @@ export default function TradingWorkspace() {
           </Panel>
         </div>
 
+        <div className="col-start-8 col-span-2 row-start-1 row-span-6 min-h-0">
+          <Panel
+            title="AI Research · Analyst"
+            code="TRD-AI"
+            right="evidence-cited"
+            className="h-full"
+          >
+            <AIAnalyst />
+          </Panel>
+        </div>
+
         <div className="col-start-10 col-span-3 row-start-1 row-span-6 min-h-0 flex flex-col gap-2">
-          <Panel title="Technicals" code="TRD-TA" className="flex-1">
+          <Panel title="Technicals" code="TRD-TA" className="flex-1 min-h-0">
             <TechIndicators symbol={instr.symbol} />
           </Panel>
           <Panel
@@ -89,35 +101,25 @@ export default function TradingWorkspace() {
             }
             code="TRD-FILL"
             right={sim.connected ? "live ledger" : "offline"}
-            className="flex-1"
+            className="flex-1 min-h-0"
           >
             <ModelFills />
           </Panel>
         </div>
 
+        {/* Blotter: Fills | Positions | Decisions — no Deposit/Cash/Equity duplicate */}
         <div className="col-start-1 col-span-5 row-start-5 row-span-2 min-h-0">
           <Panel
             title={
               sim.connected
-                ? `Bought & Sold · ${sim.buys}B / ${sim.sells}S · RPNL ${fmtPnL(sim.realizedPnL)}`
-                : "Bought & Sold · Positions"
+                ? `Blotter · ${sim.buys}B / ${sim.sells}S · RPNL ${fmtPnL(sim.realizedPnL)}`
+                : "Blotter · Fills · Positions · Decisions"
             }
-            code="TRD-PRT"
+            code="TRD-BLT"
             right={sim.connected ? sim.executionLabel : "ledger offline"}
             className="h-full"
           >
             <PortfolioPanel />
-          </Panel>
-        </div>
-
-        <div className="col-start-6 col-span-2 row-start-5 row-span-2 min-h-0">
-          <Panel
-            title="AI Research · Analyst"
-            code="TRD-AI"
-            right="evidence-cited"
-            className="h-full"
-          >
-            <AIAnalyst />
           </Panel>
         </div>
       </div>

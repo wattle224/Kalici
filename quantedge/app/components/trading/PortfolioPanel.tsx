@@ -3,6 +3,7 @@
 import { useLedgerStore } from "../../store/useLedgerStore";
 import { fmtGBP, fmtPnL } from "../../lib/ledgerApi";
 
+/** Blotter: fills / positions / decisions side-by-side (no duplicate deposit strip). */
 export function PortfolioPanel() {
   const summary = useLedgerStore((s) => s.summary);
 
@@ -15,7 +16,7 @@ export function PortfolioPanel() {
           </div>
           Connect the deposit-based simulation ledger on{" "}
           <span className="text-edge-pale">127.0.0.1:8000</span> to see live
-          capital, model decisions, and fills.
+          fills, positions, and model decisions.
         </div>
       </div>
     );
@@ -24,66 +25,26 @@ export function PortfolioPanel() {
   const fills = summary.recentFills.slice(0, 50);
   const decisions = summary.decisions
     .filter((d) => d.action === "BUY" || d.action === "SELL")
-    .slice(0, 20);
+    .slice(0, 30);
   const rpnlTone =
     summary.realizedPnL >= 0 ? "text-edge-green" : "text-edge-salmon";
-  const retTone =
-    summary.returnPct >= 0 ? "text-edge-green" : "text-edge-salmon";
 
   return (
-    <div className="h-full flex flex-col text-xs">
-      <div className="grid grid-cols-6 gap-2 p-2 border-b border-edge-crimson/30">
-        <div>
-          <div className="text-edge-dim text-xxs">DEPOSIT</div>
-          <div className="text-edge-pale tabular text-sm">
-            {fmtGBP(summary.deposit)}
-          </div>
+    <div className="h-full min-h-0 grid grid-cols-3 gap-2 p-2 text-xs">
+      {/* Bought & Sold */}
+      <div className="overflow-auto scrollbar border border-edge-crimson/20 min-h-0 flex flex-col">
+        <div className="text-xxs text-edge-crimson/80 px-2 py-1 border-b border-edge-crimson/30 uppercase flex justify-between sticky top-0 bg-bg-0/95 shrink-0">
+          <span>
+            Fills · {fills.length} ·{" "}
+            <span className={rpnlTone}>{fmtPnL(summary.realizedPnL)}</span>
+          </span>
+          <span className="text-edge-dim normal-case">
+            <span className="text-edge-green">{summary.buys}B</span>
+            {" / "}
+            <span className="text-edge-salmon">{summary.sells}S</span>
+          </span>
         </div>
-        <div>
-          <div className="text-edge-dim text-xxs">CASH</div>
-          <div className="text-edge-pale tabular text-sm">
-            {fmtGBP(summary.cash)}
-          </div>
-        </div>
-        <div>
-          <div className="text-edge-dim text-xxs">EQUITY</div>
-          <div className="text-edge-pale tabular text-sm">
-            {fmtGBP(summary.equity)}
-          </div>
-        </div>
-        <div>
-          <div className="text-edge-dim text-xxs">RETURN</div>
-          <div className={"tabular text-sm " + retTone}>
-            {summary.returnPct >= 0 ? "+" : ""}
-            {summary.returnPct.toFixed(2)}%
-          </div>
-        </div>
-        <div>
-          <div className="text-edge-dim text-xxs">BOUGHT</div>
-          <div className="text-edge-green tabular text-sm">{summary.buys}</div>
-        </div>
-        <div>
-          <div className="text-edge-dim text-xxs">SOLD</div>
-          <div className="text-edge-salmon tabular text-sm">
-            {summary.sells}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 min-h-0 grid grid-rows-[1.4fr_0.8fr_0.8fr] gap-2 p-2">
-        {/* Fills first — what was bought / sold */}
-        <div className="overflow-auto scrollbar border border-edge-crimson/20 min-h-0">
-          <div className="text-xxs text-edge-crimson/80 px-2 py-1 border-b border-edge-crimson/30 uppercase flex justify-between sticky top-0 bg-bg-0/95">
-            <span>
-              Bought &amp; Sold · {fills.length} fills · realised{" "}
-              <span className={rpnlTone}>{fmtPnL(summary.realizedPnL)}</span>
-            </span>
-            <span className="text-edge-dim normal-case">
-              <span className="text-edge-green">{summary.buys} buys</span>
-              {" · "}
-              <span className="text-edge-salmon">{summary.sells} sells</span>
-            </span>
-          </div>
+        <div className="flex-1 min-h-0 overflow-auto scrollbar">
           <table className="w-full tabular">
             <thead>
               <tr className="text-xxs text-edge-dim">
@@ -92,7 +53,7 @@ export function PortfolioPanel() {
                 <th className="text-left px-2 py-1">SYM</th>
                 <th className="text-right px-2 py-1">QTY</th>
                 <th className="text-right px-2 py-1">PX</th>
-                <th className="text-right px-2 py-1">NOTIONAL</th>
+                <th className="text-right px-2 py-1">£</th>
                 <th className="text-right px-2 py-1">RPNL</th>
               </tr>
             </thead>
@@ -147,19 +108,21 @@ export function PortfolioPanel() {
                     colSpan={7}
                     className="px-2 py-3 text-edge-dim text-xxs text-center"
                   >
-                    No fills yet — model is evaluating opportunities against
-                    your deposit.
+                    No fills yet — model is waiting for an opportunity.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+      </div>
 
-        <div className="overflow-auto scrollbar border border-edge-crimson/20 min-h-0">
-          <div className="text-xxs text-edge-crimson/80 px-2 py-1 border-b border-edge-crimson/30 uppercase">
-            Open Positions · {summary.positions.length}
-          </div>
+      {/* Open Positions */}
+      <div className="overflow-auto scrollbar border border-edge-crimson/20 min-h-0 flex flex-col">
+        <div className="text-xxs text-edge-crimson/80 px-2 py-1 border-b border-edge-crimson/30 uppercase sticky top-0 bg-bg-0/95 shrink-0">
+          Positions · {summary.positions.length}
+        </div>
+        <div className="flex-1 min-h-0 overflow-auto scrollbar">
           {summary.positions.length === 0 ? (
             <div className="p-2 text-edge-dim text-xxs">
               Flat — all capital in cash until the model buys.
@@ -221,11 +184,14 @@ export function PortfolioPanel() {
             </table>
           )}
         </div>
+      </div>
 
-        <div className="overflow-auto scrollbar border border-edge-crimson/20 min-h-0">
-          <div className="text-xxs text-edge-crimson/80 px-2 py-1 border-b border-edge-crimson/30 uppercase">
-            Model BUY / SELL Decisions · {decisions.length}
-          </div>
+      {/* BUY / SELL decisions */}
+      <div className="overflow-auto scrollbar border border-edge-crimson/20 min-h-0 flex flex-col">
+        <div className="text-xxs text-edge-crimson/80 px-2 py-1 border-b border-edge-crimson/30 uppercase sticky top-0 bg-bg-0/95 shrink-0">
+          Decisions · {decisions.length}
+        </div>
+        <div className="flex-1 min-h-0 overflow-auto scrollbar">
           {decisions.length === 0 ? (
             <div className="p-2 text-edge-dim text-xxs">
               No BUY/SELL decisions yet — model may be HOLDing.
@@ -248,7 +214,9 @@ export function PortfolioPanel() {
                     >
                       {d.action}
                     </td>
-                    <td className="px-2 py-[3px] text-edge-text">{d.reason}</td>
+                    <td className="px-2 py-[3px] text-edge-text leading-snug">
+                      {d.reason}
+                    </td>
                     <td className="px-2 py-[3px] text-right text-edge-dim tabular whitespace-nowrap">
                       {d.quantity != null
                         ? `${d.quantity.toFixed(2)} @ ${(d.price ?? 0).toFixed(4)}`
